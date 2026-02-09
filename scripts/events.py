@@ -693,12 +693,15 @@ class Event:
                               include_plotlyjs='cdn', full_html=False)
 
     def plot_html_stanford(self, processed_path, optimize=False, include_plotly=True):
+        if self.processed_file_name is None:
+            return
+
         # Check if file exist
         processed_path_html = processed_path + self.processed_file_name+ ".html"
         print(processed_path_html)
         if os.path.exists(processed_path_html):
             return
-        win_sz = re.findall("WINDOW_LEN=(\d+)", self.mer_environment, re.DOTALL)
+        win_sz = re.findall(r"WINDOW_LEN=(\d+)", self.mer_environment, re.DOTALL)
         dt = np.dtype([('perc50', np.int8)])
         x_split = np.array_split(self.processed_data,2)
         x0=x_split[0]
