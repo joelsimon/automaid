@@ -104,6 +104,7 @@ class Profile:
     park_period_s : int
     # ASCENT
     final_dbar : int
+    reference_channel : str
     # regime 1
     ascent_bottom_max_dbar : int
     ascent_bottom_size_dbar : int
@@ -145,6 +146,9 @@ class Profile:
         final_cutoff = re.findall(r"FINAL=(\d+)", self.header)
         if len(final_cutoff) > 0 :
             self.final_dbar = final_cutoff[0]
+        reference_channel = re.findall(r"REFERENCE=(\w+)", self.header)
+        if len(reference_channel) > 0 :
+            self.reference_channel = reference_channel[0]
         self.datasets = []
         datasets = self.binary.split(b'</DATA>\x0D\x0A')
         index = 0
@@ -203,7 +207,7 @@ class Profile:
                     #figure.update_yaxes(title_text=dataset.channel_description[channel], row=rows_nb, col=1)
                     rows_nb = rows_nb - 1;
 
-                figure.update_layout(title_text="Measurements performed in park mode")
+                figure.update_layout(title_text="{} acquisition channels, continous sampling every {}s".format(len(dataset.chanellist)-1,self.park_period_s))
                 if include_plotly :
                     figure.write_html(file=dataset.timeline_path, include_plotlyjs=True)
                 else :
@@ -263,7 +267,17 @@ class Profile:
                                 mode="markers",
                                 name=channel)]          
 
-            layout = graph.Layout(title="Temperature(s) profile with RBRArgo",
+            title = "Temperature(s) profile with RBRArgo\r\n"
+            if self.reference_channel == "pressure_00" :
+                title += "The following zones are defined based on Absolute pressure (dbar)"
+            else :
+                title += "The following zones are defined based on Hydrostatic pressure (dbar)"
+                
+            title += "bottom : 1 bin every {}dbar from {}dbar to {}dbar (sampling every {}ms)\r\n".format(self.ascent_bottom_size_dbar,self.ascent_bottom_max_dbar,self.ascent_middle_max_dbar,self.ascent_bottom_period_ms)
+            title += "middle : 1 bin every {}dbar from {}dbar to {}dbar (sampling every {}ms)\r\n".format(self.ascent_middle_size_dbar,self.ascent_middle_max_dbar,self.ascent_top_max_dbar, self.ascent_middle_period_ms)
+            title += "top    : 1 bin every {}dbar from {}dbar to {}dbar (sampling every {}ms)\r\n".format(self.ascent_top_size_dbar,self.ascent_top_max_dbar,self.final_dbar, self.ascent_top_period_ms)
+
+            layout = graph.Layout(title=title,
                                   xaxis=dict(title='Temperature (°C)', titlefont=dict(size=18)),
                                   yaxis=dict(title='Absolute pressure (dbar)', titlefont=dict(size=18), autorange="reversed"),
                                   hovermode='closest')

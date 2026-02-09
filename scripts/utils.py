@@ -59,7 +59,7 @@ def find_timestamped_values(regexp, content):
     lines = split_log_lines(content)
     for line in lines:
         value_catch = re.findall(regexp, line)
-        timestamp_catch = re.findall("(\d+):", line)
+        timestamp_catch = re.findall(r"(\d+):", line)
         if len(value_catch) > 0:
             v = value_catch[0]
             d = UTCDateTime(int(timestamp_catch[0]))
@@ -72,7 +72,7 @@ def format_log(log):
     datetime_log = ""
     lines = split_log_lines(log)
     for line in lines:
-        catch = re.findall("(\d+):", line)
+        catch = re.findall(r"(\d+):", line)
         if len(catch) > 0:
             timestamp = catch[0]
             isodate = UTCDateTime(int(timestamp)).isoformat()
@@ -85,7 +85,7 @@ def format_log(log):
 
 # Get date from a .LOG or a .MER file name
 def get_date_from_file_name(filename):
-    hexdate = re.findall("(.+\d+_)?([A-Z0-9]+)\.(\w{3})", filename)[0][1]
+    hexdate = re.findall(r"(.+\d+_)?([A-Z0-9]+)\.(\w{3})", filename)[0][1]
     timestamp = int(hexdate, 16)
     return UTCDateTime(timestamp)
 

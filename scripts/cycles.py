@@ -26,6 +26,7 @@ import plotly.graph_objs as graph
 import gps
 import utils
 import setup
+import preprocess
 
 # Get current version number.
 version = setup.get_version()
@@ -76,17 +77,17 @@ class Log:
         self.end_date = UTCDateTime(int(last_epoch_time))
         self.len_secs = int(self.end_date - self.start_date)
         self.len_days = self.len_secs / (60*60*24.)
-        # get gps list from log file
+        # get gps list from log file
         self.gps_list_from_log = gps.get_gps_from_log_content(self.log_name, log_content)
         # Find external pressure offset
         # Commanded as "p2t qm!offset ??? "in .cmd file
         # Reported as "...p2t37: ??x????s, offset ???mbar" in .LOG file
-        offset_param = re.findall("offset (-?\d+)mbar", self.log_content)
+        offset_param = re.findall(r"offset (-?\d+)mbar", self.log_content)
         if offset_param:
             self.p2t_offset_param = int(offset_param[0])
         # Reported as "Pext ???mbar" in .LOG file, this does not include any
         # offset correction (self.p2t_offset_param)
-        offset_measurement = re.findall("Pext (-?\d+)mbar", self.log_content)
+        offset_measurement = re.findall(r"Pext (-?\d+)mbar", self.log_content)
         if offset_measurement:
             self.p2t_offset_measurement = int(offset_measurement[0])
         # Compute the corrected pressure offset
@@ -101,7 +102,7 @@ class Log:
         # "<ERR>upload "YY","YY/ZZZZZZZZ.MER"
         #
         # NB, "\w" is this is equivalent to the set "[a-zA-Z0-9_]"
-        catch = re.findall("bytes in (\w+/\w+\.MER)", self.log_content)
+        catch = re.findall(r"bytes in (\w+/\w+\.MER)", self.log_content)
         if not catch:
             # Ideally the .LOG notes the bytes expected in the .MER, though it
             # may instead say one of the three (or more?) possibilities
@@ -115,7 +116,7 @@ class Log:
             #
             # 2018-09-15T20:11:48Z: 25_5B9D6784.LOG -> "21712 bytes in 25/5BA88AE8.MER"
             # 2018-09-24T06:58:50Z: 25_5BA88B2A.LOG -> "<ERR>upload "25","25/5BA88AE8.MER"
-            catch = re.findall("<WRN>maybe (\w+/\w+\.MER) is not complete", self.log_content)
+            catch = re.findall(r"<WRN>maybe (\w+/\w+\.MER) is not complete", self.log_content)
 
         if len(catch) > 0:
             self.mer_environment_name = catch[-1].replace("/", "_")
@@ -150,7 +151,7 @@ class Log:
                         # It just means the float transmitted a .MER file(?)
                         # See, e.g., dive #97 float 25 (25_5EFEC58E.LOG, 25_5EFF43E0.MER)
                         # That log shows a REBOOT, TESTMD, and an old .MER transmission
-                        dive_id = re.search("<DIVE ID=(\d+)", self.mer_environment)
+                        dive_id = re.search(r"<DIVE ID=(\d+)", self.mer_environment)
                         self.dive_id = int(dive_id.group(1))
 
         # Get list of gps even with partial file
@@ -162,8 +163,8 @@ class Log:
         # Set and parse info from .MER file and invert wavelet transform any binary data
         # (cannot invert the data without vital information from the .MER environment)
         if not self.mer_environment and len(self.events) > 0:
-            # Mer file is not logged on LOG file but events are found during this dive
-            # E.g : 12_65B5EC90.LOG / 12_65BF9636.MER
+            # Mer file is not logged on LOG file but events are found during this dive
+            # E.g : 12_65B5EC90.LOG / 12_65BF9636.MER
             self.mer_environment = self.events[0].default_mer_environment
 
         for event in self.events:
@@ -174,10 +175,10 @@ class Log:
             event.set_processed_data()
         # Re-sort events based on starttime (rather than INFO DATE)
         self.events.sort(key=lambda x: x.uncorrected_starttime)
-        # Merge gps list into an unique
+        # Merge gps list into an unique
         self.gps_list = gps.merge_gps_list(self.gps_list_from_log,self.gps_list_from_mermaid)
         # Check if CTD samples stored on S41 file
-        sbe41_catch = re.findall("samples in (\w+/\w+\.S41)", self.log_content)
+        sbe41_catch = re.findall(r"samples in (\w+/\w+\.S41)", self.log_content)
         if len(sbe41_catch) > 0:
             self.s41_file_name = sbe41_catch[-1].replace("/", "_")
             # Sometimes the S41 .file named in the .LOG does not exist on the server
@@ -185,7 +186,7 @@ class Log:
             if os.path.exists(s41_fullfile_name):
                 self.s41_file_name_exists = True
         # Check if CTD samples stored on S61 file
-        sbe61_catch = re.findall("samples in (\w+/\w+\.S61)", self.log_content)
+        sbe61_catch = re.findall(r"samples in (\w+/\w+\.S61)", self.log_content)
         if len(sbe61_catch) > 0:
             self.s61_file_name = sbe61_catch[-1].replace("/", "_")
             # Sometimes the S41 .file named in the .LOG does not exist on the server
@@ -193,7 +194,7 @@ class Log:
             if os.path.exists(s61_fullfile_name):
                 self.s61_file_name_exists = True
         # Check if CTD samples stored on RBR file
-        rbr_catch = re.findall("samples in (\w+/\w+\.RBR)", self.log_content)
+        rbr_catch = re.findall(r"samples in (\w+/\w+\.RBR)", self.log_content)
         if len(rbr_catch) > 0:
             self.rbr_file_name = rbr_catch[-1].replace("/", "_")
             # Sometimes the S41 .file named in the .LOG does not exist on the server
@@ -233,15 +234,15 @@ class Cycle:
     start_cycle = None
     end_cycle = None
 
-    logs = None
-    complete_logs = None
+    logs = []
+    complete_logs = []
 
     events = None
     profilesS41 = None
     profilesS61 = None
     profilesRBR = None
 
-    # All gps (SYNC MERMAID + LOG)
+    # All gps (SYNC MERMAID + LOG)
     gps_before_dive = None
     gps_after_dive = None
     gps_list = None
@@ -293,13 +294,19 @@ class Cycle:
         self.base_path = base_path
         self.__version__ = version
         self.cycle_name = cycle_name
+
+        if not cycle_name :
+            return
+        if not self.base_path :
+            return
+
         print("{}".format(self.cycle_name))
 
         # Get the date and cycle number from the file name -- the hexadecimal component of the
         # .CYCLE file name is the same Unix Epoch time as the first line of the
         # file (there in int seconds); i.e., .CYCLE files are named for the
         # time that their first line is written
-        filename_split = re.findall("(\d+)_([A-Z0-9]+)\.CYCLE", cycle_name)[0]
+        filename_split = re.findall(r"(\d+)_([A-Z0-9]+)\.CYCLE", cycle_name)[0]
         self.cycle_nb = int(filename_split[0], 10)
         self.start_date = UTCDateTime(int(filename_split[1], 16))
 
@@ -341,11 +348,11 @@ class Cycle:
                 self.set_kstnm_kinst()
                 break;
 
-        # Retreive log source informations into a cycle
+        # Retreive log source informations into a cycle
         self.logs = []
-        logs_content = self.cycle_content.split("[PREPROCESS]")[1:]
+        logs_content = self.cycle_content.split(preprocess.PREPROCESS_INFOS)[1:]
         for log_content in logs_content:
-            log_name = re.findall("Create (\d+_[A-Z0-9]+\.LOG)", log_content)
+            log_name = re.findall(r"Create (\d+_[A-Z0-9]+\.LOG)", log_content)
             if log_name :
                 lobject = Log(base_path,events,log_name[0],log_content,self.kstnm,self.kinst)
                 self.logs.append(lobject)
@@ -354,7 +361,7 @@ class Cycle:
                 # Last part of cycle content is an incomplete log file content
                 self.logs[-1].is_partial = True
 
-        # Make a list of complete log file
+        # Make a list of complete log file
         self.complete_logs = [log for log in self.logs if not log.is_partial]
         # List all events into a cycle
         self.events = [event for log in self.logs for event in log.events]
@@ -375,7 +382,7 @@ class Cycle:
         # DO NOT DO: `('\[PRESS ,\s*\d+\]P\s*(\+?\-?\d+)mbar', self.cycle_content)`
         # because "P.*mbar" is a valid pressure, even if prefixed with "[SURFIN, ..."
         # Add \] before P to delete log when battery measurement are done (for new buoys)
-        self.pressure_mbar = utils.find_timestamped_values("\]P\s*(\+?\-?\d+)mbar", self.cycle_content)
+        self.pressure_mbar = utils.find_timestamped_values(r"\]P\s*(\+?\-?\d+)mbar", self.cycle_content)
 
         # Check if the .CYCLE corresponds to float initialization
         if self.cycle_nb == 0 :
@@ -383,33 +390,33 @@ class Cycle:
             self.start_cycle = self.start_date
         else :
             # Find Leave surface date
-            diving = utils.find_timestamped_values("\[DIVING, *\d+\] *(\d+)mbar reached", self.cycle_content)
+            diving = utils.find_timestamped_values(r"\[\w+, *\d+\]P? *(\+?\-?\d+)mbar reached", self.cycle_content)
             if diving:
-                # Cycle start when buoy leave surface
+                # Cycle start when buoy leave surface
                 self.is_dive = True
                 self.descent_leave_surface_date = diving[0][1]
                 self.start_cycle = self.descent_leave_surface_date
         # Check if the .CYCLE is completed
-        complete = utils.find_timestamped_values(":\[PREPROCESS\]End of cycle", self.cycle_content)
+        complete = utils.find_timestamped_values(preprocess.REGEX_FILE_END, self.cycle_content)
         if complete :
             self.is_complete_cycle = True
             self.end_cycle = complete[0][1]
 
-        # Find start of surfacing date
-        # Start of surfacing can be triggered by start of last stage (CTD profile)
-        surfacing_stage = utils.find_timestamped_values("\]Stage \[(\d+)\] surfacing", self.cycle_content)
+        # Find start of surfacing date
+        # Start of surfacing can be triggered by start of last stage (CTD profile)
+        surfacing_stage = utils.find_timestamped_values(r"\]Stage \[(\d+)\] surfacing", self.cycle_content)
         if surfacing_stage:
             # Surfacing stage
             stage_nb = surfacing_stage[0][0]
-            regex_stage_begin = "\[MAIN  *, *\d+\]stage\[" + stage_nb + "\]"
+            regex_stage_begin = r"\[MAIN  *, *\d+\]stage\[" + stage_nb + r"\]"
             stage_begin = utils.find_timestamped_values(regex_stage_begin, self.cycle_content)
             if stage_begin :
                 self.ascent_start_date = stage_begin[0][1]
-        # By default surfacing is triggered when all stage are finished
+        # By default surfacing is triggered when all stage are finished
         if self.descent_leave_surface_date and not self.ascent_start_date :
-            surfacing = utils.find_timestamped_values("\[MAIN *, *\d+\]surfacing", self.cycle_content)
+            surfacing = utils.find_timestamped_values(r"\[MAIN *, *\d+\]surfacing", self.cycle_content)
             if surfacing :
-                # Get first surfacing after leave surface
+                # Get first surfacing after leave surface
                 for surfin in surfacing :
                     if surfin[1] > self.descent_leave_surface_date :
                         self.ascent_start_date = surfin[1]
@@ -419,7 +426,7 @@ class Cycle:
         # It's possible that MERMAID physically dive and returned to the surface but there was
         # an error with the .LOG, so that information was not recorded (ex. 25_5B9CF6CF.LOG)
         # Log files may record several bladder fillings during a mission
-        fillb_list = utils.find_timestamped_values("\[SURFIN, *\d+\]filling external bladder", self.cycle_content)
+        fillb_list = utils.find_timestamped_values(r"\[SURFIN, *\d+\]filling external bladder", self.cycle_content)
         for fillb in fillb_list :
             if fillb[1] > self.ascent_start_date :
                 # find first fill after surfacing start
@@ -427,13 +434,13 @@ class Cycle:
                 break
 
         # Find if emergency triggered
-        self.emergency_triggers = utils.find_timestamped_values("\]<ERR>TRIGGERED BY (.*)",self.cycle_content)
+        self.emergency_triggers = utils.find_timestamped_values(r"\]<ERR>TRIGGERED BY (.*)",self.cycle_content)
         # Find if mermaid reboot occurs
-        self.mermaid_reboots = utils.find_timestamped_values("\]\$BOARD",self.cycle_content)
+        self.mermaid_reboots = utils.find_timestamped_values(r"\]\$BOARD",self.cycle_content)
         # Find vitals for cycle
-        self.vitals_vbat = utils.find_timestamped_values("Vbat (\d+)mV \(min (\d+)mV\)",self.cycle_content)
-        self.vitals_pext = utils.find_timestamped_values("Pext (-?\d+)mbar \(rng (-?\d+)mbar\)",self.cycle_content)
-        self.vitals_pint = utils.find_timestamped_values("internal pressure (\d+)Pa",self.cycle_content)
+        self.vitals_vbat = utils.find_timestamped_values(r"Vbat (\d+)mV \(min (\d+)mV\)",self.cycle_content)
+        self.vitals_pext = utils.find_timestamped_values(r"Pext (-?\d+)mbar \(rng (-?\d+)mbar\)",self.cycle_content)
+        self.vitals_pint = utils.find_timestamped_values(r"internal pressure (\d+)Pa",self.cycle_content)
         # Generate the directory name (CycleNB_Date)
         self.directory_name = filename_split[0] + "_" + self.start_date.strftime("%Y%m%d-%Hh%Mm%Ss")
         if self.is_init:
@@ -443,12 +450,15 @@ class Cycle:
 
         self.processed_path = self.base_path + self.directory_name + "/"
         # Find the S41 profiles if any
-        self.profilesS41 = profilesS41.get_profiles_between(self.start_date, self.end_date)
+        if profilesS41 :
+            self.profilesS41 = profilesS41.get_profiles_between(self.start_date, self.end_date)
         # Find the S61 profiles if any
-        self.profilesS61 = profilesS61.get_profiles_between(self.start_date, self.end_date)
+        if profilesS61 :
+            self.profilesS61 = profilesS61.get_profiles_between(self.start_date, self.end_date)
         # Find the RBR profiles if any
-        self.profilesRBR = profilesRBR.get_profiles_between(self.start_date, self.end_date)
-        # Constitute lists of gps
+        if profilesRBR :
+            self.profilesRBR = profilesRBR.get_profiles_between(self.start_date, self.end_date)
+        # Constitute lists of gps
         self.gps_before_dive = []
         self.gps_after_dive = []
         self.gps_list = []
@@ -473,19 +483,21 @@ class Cycle:
                     self.gps_list.append(gps)
                     if gps.clockdrift is not None and gps.clockfreq is not None:
                         self.gps_sync_list.append(gps)
+
     def __len__(self):
         return 1
 
     def write_datetime_cycle(self):
         # Check if file exist
-        processed_path = self.processed_path + self.cycle_name + ".h"
-        if os.path.exists(processed_path):
-            return
-        # Generate log with formatted date
-        formatted_log = utils.format_log(self.cycle_content)
-        # Write file
-        with open(processed_path, "w") as f:
-            f.write(formatted_log)
+        if self.processed_path :
+            processed_path = self.processed_path + self.cycle_name + ".h"
+            if os.path.exists(processed_path):
+                return
+            # Generate log with formatted date
+            formatted_log = utils.format_log(self.cycle_content)
+            # Write file
+            with open(processed_path, "w") as f:
+                f.write(formatted_log)
 
     def write_mermaid_environment_files(self):
         # Write all mermaid environement in one cycle
@@ -506,14 +518,16 @@ class Cycle:
 
     def write_s41_environment_file(self):
         # Check if there is a s41 profile
-        if len(self.profilesS41) == 0:
+        if not self.profilesS41 or len(self.profilesS41) == 0:
+            return
+        if not self.processed_path :
             return
         # Get environnement for all profiles
         environment = ""
         for profile in self.profilesS41:
             environment += "<PARAMETERS file=" + profile.file_name + ">\r\n"
             environment += profile.parameters_header()
-            environment += "<\PARAMETERS>\r\n"
+            environment += r"<\PARAMETERS>\r\n"
 
         # Check if file exist
         processed_path = self.processed_path + self.cycle_name + ".S41.params"
@@ -525,15 +539,17 @@ class Cycle:
             f.write(environment)
 
     def write_s61_environment_file(self):
-        # Check if there is a s41 profile
-        if len(self.profilesS61) == 0:
+        # Check if there is a s61 profile
+        if not self.profilesS61 or len(self.profilesS61) == 0:
+            return
+        if not self.processed_path :
             return
         # Get environnement for all profiles
         environment = ""
         for profile in self.profilesS61:
             environment += "<PARAMETERS file=" + profile.file_name + ">\r\n"
             environment += profile.parameters_header()
-            environment += "<\PARAMETERS>\r\n"
+            environment += r"<\PARAMETERS>\r\n"
 
         # Check if file exist
         processed_path = self.processed_path + self.cycle_name + ".S61.params"
@@ -548,7 +564,12 @@ class Cycle:
         '''
             Generates a dive plot for a complete cycle
         '''
-
+        if not self.processed_path :
+            return
+        if not self.cycle_name :
+            return
+        if not self.directory_name:
+            return
         # Check if file exist
         processed_path = self.processed_path + self.cycle_name[:-4] + '.html'
         if os.path.exists(processed_path):
@@ -561,11 +582,11 @@ class Cycle:
         # Search pressure values
         # DO NOT DO: `('\[PRESS ,\s*\d+\]P\s*(\+?\-?\d+)mbar', self.cycle_content)`
         # because "P.*mbar" is a valid pressure, even if prefixed with "[SURFIN, ..."
-        pressure = utils.find_timestamped_values("\]P\s*(\+?\-?\d+)mbar", self.cycle_content)
-        bypass = utils.find_timestamped_values("BYPASS.+\].*opening (\d+)", self.cycle_content)
-        valve = utils.find_timestamped_values(":\[VALVE.+\].*opening f?o?r? ?(\d+)ms", self.cycle_content)
-        pump = utils.find_timestamped_values(":\[PUMP.+\].*during (\d+)ms", self.cycle_content)
-        mermaid_events = utils.find_timestamped_values("\[MRMAID,\d+\] *\d+dbar, *-?\d+degC", self.cycle_content)
+        pressure = utils.find_timestamped_values(r"\]P\s*(\+?\-?\d+)mbar", self.cycle_content)
+        bypass = utils.find_timestamped_values(r"BYPASS.+\].*opening (\d+)", self.cycle_content)
+        valve = utils.find_timestamped_values(r":\[VALVE.+\].*opening f?o?r? ?(\d+)ms", self.cycle_content)
+        pump = utils.find_timestamped_values(r":\[PUMP.+\].*during (\d+)ms", self.cycle_content)
+        mermaid_events = utils.find_timestamped_values(r"\[MRMAID,\d+\] *\d+dbar, *-?\d+degC", self.cycle_content)
 
         # Return if there is no data to plot
         if len(pressure) < 1:
@@ -575,7 +596,7 @@ class Cycle:
         p_val = [-int(p[0])/100. for p in pressure]
         p_date = [p[1] for p in pressure]
 
-        # Plotly you can implement WebGL with Scattergl() in place of Scatter()
+        # Plotly you can implement WebGL with Scattergl() in place of Scatter()
         # for increased speed, improved interactivity, and the ability to plot even more data.
         Scatter = graph.Scatter
         if optimize :
@@ -599,7 +620,7 @@ class Cycle:
 
         # Add vertical lines
         # Find minimum and maximum for Y axis of vertical lines
-        minimum = min(p_val) + 0.05*min(p_val)
+        minimum = int(min(p_val) + 0.05*min(p_val))
         maximum = 0
 
         # Add bypass lines
@@ -632,7 +653,11 @@ class Cycle:
                                                           name="MERMAID events",
                                                           color="purple")
         # Add emergency if any
-        emergency_triggers = [pp[1] for pp in self.emergency_triggers]
+        if not self.emergency_triggers:
+            emergency_triggers = []
+        else :
+            emergency_triggers = [pp[1] for pp in self.emergency_triggers]
+
         emergency_triggers_line = utils.plotly_vertical_shape(emergency_triggers,
                                                                   ymin=minimum,
                                                                   ymax=maximum,
@@ -640,7 +665,10 @@ class Cycle:
                                                                   color="black",
                                                                   width=2.0)
         # Add mermaid reboot if any
-        mermaid_reboots = [pp[1] for pp in self.mermaid_reboots]
+        if not self.mermaid_reboots:
+            mermaid_reboots = []
+        else :
+            mermaid_reboots = [pp[1] for pp in self.mermaid_reboots]
         mermaid_reboots_line = utils.plotly_vertical_shape(mermaid_reboots,
                                                                   ymin=minimum,
                                                                   ymax=maximum,
@@ -658,8 +686,8 @@ class Cycle:
                               )
         figure = graph.Figure(data=data, layout=layout)
 
-        # Include plotly into any html files ?
-        # If false user need connexion to open html files
+        # Include plotly into any html files ?
+        # If false user need connexion to open html files
         if include_plotly :
             figure.write_html(file=processed_path, include_plotlyjs=True)
         else :
@@ -720,7 +748,7 @@ class Cycle:
         self.gps_valid4clockdrift_correction = False
         self.gps_valid4location_interp = False
 
-        # Only gps synchronization save one .MER file give clockfreq and clockdift
+        # Only gps synchronization save one .MER file give clockfreq and clockdift
         if self.gps_sync_before_dive:
             gps_before = self.gps_sync_before_dive
         else:
@@ -1013,48 +1041,58 @@ class Cycle:
             self.ascent_first_loc_after_event = self.ascent_reach_surface_loc
 
         # Compute event locations between interpolated locations of exit and re-entry of surface waters
-        for event in self.events:
-            event.compute_station_location(self.descent_last_loc_before_event,
-                                           self.ascent_first_loc_after_event)
+        if self.events :
+            for event in self.events:
+                event.compute_station_location(self.descent_last_loc_before_event,
+                                               self.ascent_first_loc_after_event)
 
     def set_events_obspy_trace_stats(self):
-        for event in self.events:
-            if event.station_loc is not None:
-                event.set_obspy_trace_stats()
+        if self.events :
+            for event in self.events:
+                if event.station_loc is not None:
+                    event.set_obspy_trace_stats()
 
     def write_events_html(self, optimize=False, include_plotly=True):
-        for event in self.events:
-            if not event.is_stanford_event:
-                event.plot_html(self.processed_path,optimize,include_plotly)
-            else:
-                event.plot_html_stanford(self.processed_path,optimize,include_plotly)
+        if self.events :
+            for event in self.events:
+                if not event.is_stanford_event:
+                    event.plot_html(self.processed_path,optimize,include_plotly)
+                else:
+                    event.plot_html_stanford(self.processed_path,optimize,include_plotly)
 
     def write_events_png(self):
-        for event in self.events:
-            if not event.is_stanford_event:
-                event.plot_png(self.processed_path)
-            else:
-                event.plot_png_stanford(self.processed_path)
+        if self.events :
+            for event in self.events:
+                if not event.is_stanford_event:
+                    event.plot_png(self.processed_path)
+                else:
+                    event.plot_png_stanford(self.processed_path)
 
     def write_profile_html(self, optimize=False, include_plotly=True):
-        for profile in self.profilesS41:
-            profile.write_temperature_html(self.processed_path,optimize,include_plotly)
-            profile.write_salinity_html(self.processed_path,optimize,include_plotly)
-        for profile in self.profilesS61:
-            profile.write_temperature_html(self.processed_path,optimize,include_plotly)
-            profile.write_salinity_html(self.processed_path,optimize,include_plotly)
-        for profile in self.profilesRBR:
-            profile.write_park_html(self.processed_path,optimize,include_plotly)
-            profile.write_temperature_html(self.processed_path,optimize,include_plotly)
-            profile.write_salinity_html(self.processed_path,optimize,include_plotly)
+        if self.profilesS41 :
+            for profile in self.profilesS41:
+                profile.write_temperature_html(self.processed_path,optimize,include_plotly)
+                profile.write_salinity_html(self.processed_path,optimize,include_plotly)
+        if self.profilesS61 :    
+            for profile in self.profilesS61:
+                profile.write_temperature_html(self.processed_path,optimize,include_plotly)
+                profile.write_salinity_html(self.processed_path,optimize,include_plotly)
+        if self.profilesRBR :
+            for profile in self.profilesRBR:
+                profile.write_park_html(self.processed_path,optimize,include_plotly)
+                profile.write_temperature_html(self.processed_path,optimize,include_plotly)
+                profile.write_salinity_html(self.processed_path,optimize,include_plotly)
 
     def write_profile_csv(self):
-        for profile in self.profilesS41:
-            profile.write_csv(self.processed_path)
-        for profile in self.profilesS61:
-            profile.write_csv(self.processed_path)
-        for profile in self.profilesRBR:
-            profile.write_csv(self.processed_path)
+        if self.profilesS41 :
+            for profile in self.profilesS41:
+                profile.write_csv(self.processed_path)
+        if self.profilesS61 :
+            for profile in self.profilesS61:
+                profile.write_csv(self.processed_path)
+        if self.profilesRBR :
+            for profile in self.profilesRBR:
+                profile.write_csv(self.processed_path)
 
     def write_events_sac(self):
         for event in self.events:
@@ -1076,7 +1114,7 @@ class Cycle:
         return len_str + "\n"
 
     def print_errors(self):
-        # Print emergency triggers
+        # Print emergency triggers
         errors_str = ""
         if self.emergency_triggers:
             causes = "!!!WARNING !!! Emergency : "
@@ -1084,7 +1122,7 @@ class Cycle:
                 causes += "{} ".format(trig[0])
             print(causes)
             errors_str += causes + "\n"
-        # Print mermaid reboot events
+        # Print mermaid reboot events
         if self.mermaid_reboots:
             dates = "!!!WARNING !!! Mermaid reboot : "
             for reboot in self.mermaid_reboots:

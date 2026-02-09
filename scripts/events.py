@@ -569,7 +569,7 @@ class Event:
                                                     self.corrected_starttime)
         self.station_loc_is_preliminary = station_loc_is_preliminary
 
-    def set_processed_file_name(self):
+    def set_processed_file_name(self, force_without_loc=False):
         '''Note that setting of attr `processed_file_name` does not imply that the event
         may be written to output .sac and .mseed files; that is determined by
         the setting of `station_loc`
@@ -579,9 +579,10 @@ class Event:
 
         '''
 
-        processed_file_name = UTCDateTime.strftime(UTCDateTime(self.uncorrected_starttime),\
-                                                   "%Y%m%dT%H%M%S") + "." + self.mer_binary_name
-        self.uncorrected_processed_file_name = processed_file_name
+        if force_without_loc :
+            processed_file_name = UTCDateTime.strftime(UTCDateTime(self.uncorrected_starttime),\
+                                                       "%Y%m%dT%H%M%S") + "." + self.mer_binary_name
+            self.uncorrected_processed_file_name = processed_file_name
 
         if not self.corrected_starttime:
             return

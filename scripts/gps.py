@@ -372,7 +372,7 @@ def get_gps_from_mer_environment(mer_environment_name, mer_environment):
     for gps_mer in gps_mer_list:
         rawstr_dict = {'fixdate': None, 'latitude': None, 'longitude': None, 'clockdrift': None}
         # .MER times are given simply as, e.g., "2020-10-20T02:36:55"
-        fixdate = re.findall(" DATE=(\d+-\d+-\d+T\d+:\d+:\d+)", gps_mer)
+        fixdate = re.findall(r" DATE=(\d+-\d+-\d+T\d+:\d+:\d+)", gps_mer)
         if len(fixdate) > 0:
             fixdate = fixdate[0]
             rawstr_dict['fixdate'] = fixdate
@@ -382,7 +382,7 @@ def get_gps_from_mer_environment(mer_environment_name, mer_environment):
 
         # .MER latitudes are given as, e.g., "-2233.9800" (degrees decimal minutes) where the first 3
         # chars are the degrees (= S22deg33.9800mn) in .LOG parlance, with extra precision here
-        latitude = re.findall(" LAT=([+,-])(\d{2})(\d+\.\d+)", gps_mer)
+        latitude = re.findall(r" LAT=([+,-])(\d{2})(\d+\.\d+)", gps_mer)
         if len(latitude) > 0:
             rawstr_dict['latitude'] = re.search("LAT=(.*) LON", gps_mer).group(1)
             latitude = latitude[0]
@@ -396,7 +396,7 @@ def get_gps_from_mer_environment(mer_environment_name, mer_environment):
 
         # .MER longitudes are given as, e.g., "-14122.6800" (degrees decimal minutes) where the first
         # 4 chars are the degrees (= W141deg22.6800mn) in .LOG parlance, with an extra precision here
-        longitude = re.findall(" LON=([+,-])(\d{3})(\d+\.\d+)", gps_mer)
+        longitude = re.findall(r" LON=([+,-])(\d{3})(\d+\.\d+)", gps_mer)
         if len(longitude) > 0:
             rawstr_dict['longitude'] = re.search("LON=(.*) />", gps_mer).group(1)
             longitude = longitude[0]
@@ -415,37 +415,37 @@ def get_gps_from_mer_environment(mer_environment_name, mer_environment):
         # variable-length string); very often only USEC=*" will exist
         clockdrift = re.findall("<DRIFT( [^>]+) />", gps_mer)
         if len(clockdrift) > 0:
-            rawstr_dict['clockdrift'] = re.search("<DRIFT (.*) />", gps_mer).group(1)
+            rawstr_dict['clockdrift'] = re.search(r"<DRIFT (.*) />", gps_mer).group(1)
             clockdrift = clockdrift[0]
             _df = 0
-            catch = re.findall(" USEC=(-?\d+)", clockdrift)
+            catch = re.findall(r" USEC=(-?\d+)", clockdrift)
             if catch:
                 _df += 10 ** (-6) * float(catch[0])
-            catch = re.findall(" SEC=(-?\d+)", clockdrift)
+            catch = re.findall(r" SEC=(-?\d+)", clockdrift)
             if catch:
                 _df += float(catch[0])
-            catch = re.findall(" MIN=(-?\d+)", clockdrift)
+            catch = re.findall(r" MIN=(-?\d+)", clockdrift)
             if catch:
                 _df += 60 * float(catch[0])
-            catch = re.findall(" HOUR=(-?\d+)", clockdrift)
+            catch = re.findall(r" HOUR=(-?\d+)", clockdrift)
             if catch:
                 _df += 60 * 60 * float(catch[0])
-            catch = re.findall(" DAY=(-?\d+)", clockdrift)
+            catch = re.findall(r" DAY=(-?\d+)", clockdrift)
             if catch:
                 _df += 24 * 60 * 60 * float(catch[0])
-            catch = re.findall(" MONTH=(-?\d+)", clockdrift)
+            catch = re.findall(r" MONTH=(-?\d+)", clockdrift)
             if catch:
                 # An approximation of 30 days per month is sufficient this is just to see if there is something
                 # wrong with the drift
                 _df += 30 * 24 * 60 * 60 * float(catch[0])
-            catch = re.findall(" YEAR=(-?\d+)", clockdrift)
+            catch = re.findall(r" YEAR=(-?\d+)", clockdrift)
             if catch:
                 _df += 365 * 24 * 60 * 60 * float(catch[0])
             clockdrift = _df
         else:
             clockdrift = None
 
-        clockfreq = re.findall("<CLOCK Hz=(-?\d+)", gps_mer)
+        clockfreq = re.findall(r"<CLOCK Hz=(-?\d+)", gps_mer)
         if len(clockfreq) > 0:
             clockfreq = clockfreq[0]
             clockfreq = int(clockfreq)
@@ -487,9 +487,9 @@ def get_gps_from_log_content(log_name, log_content):
         rawstr_dict = {'fixdate': None, 'latitude': None, 'longitude': None, 'clockdrift': None}
         # .LOG GPS times are given as integer UNIX Epoch times prepending the latitude longitude line
         # .LOG latitudes are given as, e.g., "S22deg33.978mn" (degrees and decimal minutes)
-        latitude = re.findall("(\d+):\[SURF *, *\d+\]([S,N])(\d+)deg(\d+.\d+)mn", gps_log)
+        latitude = re.findall(r"(\d+):\[\w+ *, *\d+\]([S,N])(\d+)deg(\d+.\d+)mn", gps_log)
         if len(latitude) > 0:
-            rawstr_dict['latitude'] = re.search("[S,N][0-9]+deg[0-9]+\.[0-9]+mn", gps_log).group(0)
+            rawstr_dict['latitude'] = re.search(r"[S,N][0-9]+deg[0-9]+\.[0-9]+mn", gps_log).group(0)
             latitude = latitude[0]
             fixdate = latitude[0]
             rawstr_dict['fixdate'] = fixdate
@@ -504,9 +504,9 @@ def get_gps_from_log_content(log_name, log_content):
             latitude = None
 
         # .LOG latitudes are given as, e.g., "W141deg22.679mn" (degrees and decimal minutes)
-        longitude = re.findall("([E,W])(\d+)deg(\d+.\d+)mn", gps_log)
+        longitude = re.findall(r"([E,W])(\d+)deg(\d+.\d+)mn", gps_log)
         if len(longitude) > 0:
-            rawstr_dict['longitude'] = re.search("[E,W][0-9]+deg[0-9]+\.[0-9]+mn", gps_log).group(0)
+            rawstr_dict['longitude'] = re.search(r"[E,W][0-9]+deg[0-9]+\.[0-9]+mn", gps_log).group(0)
             longitude = longitude[0]
             if longitude[0] == "E":
                 sign = 1
@@ -516,21 +516,21 @@ def get_gps_from_log_content(log_name, log_content):
         else:
             longitude = None
 
-        hdop = re.findall("hdop (\d+.\d+)", gps_log)
+        hdop = re.findall(r"hdop (\d+.\d+)", gps_log)
         if len(hdop) > 0:
             hdop = hdop[0]
             hdop = float(hdop)
         else:
             hdop = None
 
-        vdop = re.findall("vdop (\d+.\d+)", gps_log)
+        vdop = re.findall(r"vdop (\d+.\d+)", gps_log)
         if len(vdop) > 0:
             vdop = vdop[0]
             vdop = float(vdop)
         else:
             vdop = None
 
-        clockdrift = re.findall("GPSACK:(.\d+),(.\d+),(.\d+),(.\d+),(.\d+),(.\d+),(.\d+)?;", gps_log)
+        clockdrift = re.findall(r"GPSACK:(.\d+),(.\d+),(.\d+),(.\d+),(.\d+),(.\d+),(.\d+)?;", gps_log)
         if len(clockdrift) > 0:
             clockdrift = clockdrift[0]
             rawstr_dict['clockdrift'] = clockdrift
@@ -545,7 +545,7 @@ def get_gps_from_log_content(log_name, log_content):
         else:
             clockdrift = None
 
-        clockfreq = re.findall("GPSOFF:(-?\d+);", gps_log)
+        clockfreq = re.findall(r"GPSOFF:(-?\d+);", gps_log)
         if len(clockfreq) > 0:
             clockfreq = clockfreq[0]
             clockfreq = int(clockfreq)
@@ -617,7 +617,7 @@ def write_gps(cycles, creation_datestr, processed_path, mfloat_path):
 
     # Add comma between each field and remove field width (non-decimal) to format the csv
     fmt_csv  = ','.join(fmt)
-    fmt_csv  = re.sub(':>\d*', ':', fmt_csv)
+    fmt_csv  = re.sub(r':>\d*', ':', fmt_csv)
 
     # Specify file paths
     base_path = os.path.join(processed_path, mfloat_path)

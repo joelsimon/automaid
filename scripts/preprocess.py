@@ -13,8 +13,6 @@
 # Last modified by FRO: 09-Sep-2024
 # Last tested: Python 3.10.13, 22.04.3-Ubuntu
 
-
-
 import glob
 import os
 import shutil
@@ -29,7 +27,15 @@ from obspy import UTCDateTime
 
 mermaid_path = os.environ["MERMAID"]
 database_path = os.path.join(mermaid_path, "database")
+
+
 DATABASE_LINK_NAME = "Databases.json"
+
+PREPROCESS_INFOS = ":[PREPROCESS]"
+REGEX_INFOS = r":\[PREPROCESS\]"
+
+PREPROCESS_END = ":[PREPROCESS]End of cycle"
+REGEX_FILE_END = r":\[PREPROCESS\]End of cycle"
 
 
 def database_update(path):
@@ -44,6 +50,7 @@ def database_update(path):
     '''
     print("Update Databases")
     network = 1
+    database_list = []
     if path :
         global database_path
         database_path = path
@@ -56,9 +63,9 @@ def database_update(path):
         network = 0
     else:
         if request.status_code == 200:
-            # Read link file content into object
+            # Read link file content into object
             database_list = request.json()
-            # Retreive list of databases into linker file
+            # Retreive list of databases into linker file
             for database in database_list:
                 if database["Name"]:
                     try:
@@ -81,7 +88,7 @@ def database_update(path):
             if os.path.exists(database_path):
                 shutil.rmtree(database_path)
             os.makedirs(database_path)
-            # Store databases content
+            # Store databases content
             for database in database_list:
                 if database["Name"]:
                     path = os.path.join(database_path, database["Name"])
@@ -89,7 +96,7 @@ def database_update(path):
                         json.dump(database["data"], databasefile)
                     # Delete content from link object
                     database.pop('data', None)
-            # Store link file
+            # Store link file
             link_path = os.path.join(database_path, DATABASE_LINK_NAME)
             with open(link_path, 'w') as linkfile:
                 json.dump(database_list, linkfile, indent=4)
@@ -552,7 +559,7 @@ def decrypt_short(f,short_card) :
             print("err:unpackvalue")
             return ""   
         # seach specific format
-        regexShortFomat = "[^%]*(%([\-\+ 0])?(\d)*\.?([\d\*])*([dfcsXxupt]))"
+        regexShortFomat = r"[^%]*(%([\-\+ 0])?(\d)*\.?([\d\*])*([dfcsXxupt]))"
         shortformatfind = re.findall(regexShortFomat, arg["FORMAT"])
         if len(shortformatfind) == 0 :
             print("err:wrongformat")
@@ -637,7 +644,7 @@ def decrypt_all(path):
         with open(binary_file, "r", errors='replace') as f:
             version = f.readline()
         # Get version
-        catch = re.findall("<BDD ([0-9]{3})\.[0-9]{3}\.[0-9]{3}_?V?([0-9]*\.[0-9]+)-?.*>", version)
+        catch = re.findall(r"<BDD ([0-9]{3})\.[0-9]{3}\.[0-9]{3}_?V?([0-9]*\.[0-9]+)-?.*>", version)
         if len(catch) > 0:
             # Get database binary_file path
             file_version=catch[-1][1].split(".")
@@ -672,6 +679,10 @@ def decrypt_all(path):
 
                     print("convert " + binary_file_name + " to " + log_file_name)
                     decrypt_list = json.loads(database)
+                    log_card = []
+                    warn_card = []
+                    err_card = []
+                    short_card = []
                     for decrypt_card in decrypt_list:
                         if decrypt_card["TYPE"] == "LOG":
                             log_card = decrypt_card["DECRYPTCARD"]
@@ -762,21 +773,21 @@ def convert_in_cycle(path,begin,end):
     cycle_nb = 0
     # List all LOG files
     logFiles = glob.glob(os.path.join(path,"*.LOG"));
-    # Sort files by names
+    # Sort files by names
     logFiles = sorted(logFiles, key=functools.cmp_to_key(sort_log_files))
     # Init Log index
     iLog = 0
     # Init Content of cycle file
     content = ""
-    # Init file name and path variables
+    #Init file name and path variables
     cycle_file_name = None
-    cycle_file_path = None
+    cycle_file_path = ""
     # Split the path
     # Set default delimiter
     delim = "\r\n"
 
     while iLog < len(logFiles):
-        # Get filepath
+        # Get filepath
         logFile = logFiles[iLog]
         # Get file start date
         start_date = utils.get_date_from_file_name(os.path.basename(logFile))
@@ -786,7 +797,7 @@ def convert_in_cycle(path,begin,end):
             if not cycle_file_name :
                 cycle_file_name = "{:04d}".format(0) + "_" + get_hexa_date(logFile)
                 cycle_file_path = os.path.join(path,cycle_file_name)
-            # Init last date
+            # Init last date
             last_date = start_date
             with open(logFile, "rb") as f:
                 # Read the content of the LOG
@@ -813,17 +824,17 @@ def convert_in_cycle(path,begin,end):
                 lines = utils.split_log_lines(fileRead)
                 for line in lines:
                     # Is diving ?
-                    if not is_dive and re.findall("\[DIVING, *\d+\] *(\d+)mbar reached", line) :
+                    if not is_dive and re.findall(r"\[DIVING, *\d+\]P? *(\+?\-?\d+)mbar reached", line) :
                         is_dive = True
                     # File is switched ?
-                    if not is_finish and re.findall("\*\*\* switching to.*", line) :
+                    if not is_finish and re.findall(r"\*\*\* switching to.*", line) :
                         is_finish = True
                     # Gps fix ?
-                    if not is_gps_fix and re.findall("GPS fix\.\.\.", line) :
+                    if not is_gps_fix and re.findall(r"GPS fix\.\.\.", line) :
                         is_gps_fix = True
 
                     # No GPS without gps fix date ?
-                    gps_none_line = re.findall("(\d+):\[.+\]<WARN>no fix after",line)
+                    gps_none_line = re.findall(r"(\d+):\[.+\]<WARN>no fix after",line)
                     if gps_none_line:
                         if not is_gps_fix :
                             last_datetime = str(int(gps_none_line[0]) - 180)
@@ -837,25 +848,25 @@ def convert_in_cycle(path,begin,end):
                                 gps_fix_none = 0
 
                     # GPS ACK without gps fix date ?
-                    gps_ack_line = re.findall("\$GPSACK:.+;",line)
+                    gps_ack_line = re.findall(r"\$GPSACK:.+;",line)
                     if gps_ack_line and not is_gps_fix:
                         last_datetime = str(int(last_date.timestamp))
                         fileFixed += last_datetime + ":[SURF  ,0022]GPS fix..." + delim
                         is_gps_fix = True
                     # GPS line without gps fix date ?
-                    gps_line = re.findall("(\d+):\[SURF *, *\d+\]([S,N])(\d+)deg(\d+.\d+)mn", line)
+                    gps_line = re.findall(r"(\d+):\[\w+ *, *\d+\]([S,N])(\d+)deg(\d+.\d+)mn", line)
                     if gps_line :
                         if not is_gps_fix :
                             last_datetime = str(int(last_date.timestamp))
                             fileFixed += last_datetime + ":[SURF  ,0022]GPS fix..." + delim
                         is_gps_fix = False
                     # Split line and test
-                    catch = re.findall("(\d+):", line)
+                    catch = re.findall(r"(\d+):", line)
                     if len(catch) > 0:
                         datetime = UTCDateTime(int(catch[0]))
                         if datetime < start_date :
                             # line timestamp is before the start date ?
-                            # Replace timestamp by last line timestamp or start date by default
+                            # Replace timestamp by last line timestamp or start date by default
                             # e.g., 25_643FB6EF.LOG
                             last_datetime = str(int(last_date.timestamp))
                             line.replace(catch[0],last_datetime)
@@ -873,24 +884,24 @@ def convert_in_cycle(path,begin,end):
                 # Test if the buoy has dived and surfaced or If the ascent is in the following files
                 if is_complete_dive or is_reboot_in_dive :
                     # Split content to get before diving (First internal pressure mesurement)
-                    content += str(int(get_hexa_date(logFile),16)) + ":[PREPROCESS]Create " + os.path.basename(logFile) + delim
+                    content += str(int(get_hexa_date(logFile),16)) + PREPROCESS_INFOS + "Create " + os.path.basename(logFile) + delim
                     lines = utils.split_log_lines(fileFixed)
                     before_dive = None
                     for index, line in enumerate(lines):
                         # Wait an internal pressure follower by bypass configuration
-                        internal_pressure = re.findall('(\d+):.+internal pressure (-?\d+)Pa', line)
+                        internal_pressure = re.findall(r'(\d+):.+internal pressure (-?\d+)Pa', line)
                         if internal_pressure :
                             next_index = index
                             while next_index < len(lines) - 1:
                                 next_index = next_index+1
-                                before_dive = re.findall('(\d+):(\[.+\])? +bypass (\d+)ms (\d+)ms \((\d+)ms (\d+)ms stored\)', lines[next_index])
+                                before_dive = re.findall(r'(\d+):(\[.+\])? +bypass (\d+)ms (\d+)ms', lines[next_index])
                                 if before_dive :
                                     break;
                             
                         # Wait start of next dive
                         if before_dive :
                             # exit the loop
-                            content += before_dive[0][0] + ":[PREPROCESS]End of cycle" + delim
+                            content += before_dive[0][0] + PREPROCESS_END + delim
                             # Write a complete cycle
                             with open(cycle_file_path + ".CYCLE", "w") as fcycle:
                                 fcycle.write(content)
@@ -903,7 +914,7 @@ def convert_in_cycle(path,begin,end):
                             break
                         content += line + delim
                 # Append filename
-                content += str(int(get_hexa_date(logFile),16)) + ":[PREPROCESS]Create " + os.path.basename(logFile) + delim
+                content += str(int(get_hexa_date(logFile),16)) + PREPROCESS_INFOS + "Create " + os.path.basename(logFile) + delim
                 # Append file content
                 content += fileFixed
         # Next File
