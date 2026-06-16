@@ -65,38 +65,73 @@ preliminary_location_ok = False
 main_path = os.path.abspath(__file__)
 scripts_path = os.path.dirname(main_path)
 
-# Set default processed,server paths and database path
-def_mermaid_path = os.environ["MERMAID"]
-def_server_path = os.path.join(def_mermaid_path, "server")
-def_processed_path = os.path.join(def_mermaid_path, "processed")
-def_database_path = os.path.join(def_mermaid_path, "database")
+server_path = None
+processed_path = None
+database_path = None
 
-# Parse (optional) command line inputs to override default paths
-parser = argparse.ArgumentParser()
-# problem: metavar=''   prints: "-s , --server"
-# problem: metavar='\b' prints: "-s, --server", but misaligns the help statement...
-parser.add_argument('-s',
-                    '--server',
-                    default=def_server_path,
-                    dest='server',
-                    #metavar='\b',
-                    help="server directory (default: {:s})".format(def_server_path))
-parser.add_argument('-p',
-                    '--processed',
-                    default=def_processed_path,
-                    dest='processed',
-                    #metavar='',
-                    help="processed directory (default: {:s})".format(def_processed_path))
-parser.add_argument('-d',
-                    '--database',
-                    default=def_database_path,
-                    dest='database',
-                    #metavar='',
-                    help="database directory (default: {:s})".format(def_database_path))
-args = parser.parse_args()
-server_path = os.path.abspath(args.server)
-processed_path = os.path.abspath(args.processed)
-database_path = os.path.abspath(args.database)
+
+def _default_mermaid_subdir(name):
+    mermaid_path = os.environ.get("MERMAID")
+    if mermaid_path is None:
+        return None
+    return os.path.join(mermaid_path, name)
+
+
+def _path_help(label, default_path):
+    if default_path is None:
+        return "{:s} directory (required if MERMAID is unset)".format(label)
+    return "{:s} directory (default: {:s})".format(label, default_path)
+
+
+def build_parser():
+    # Parse (optional) command line inputs to override default paths.
+    parser = argparse.ArgumentParser()
+    def_server_path = _default_mermaid_subdir("server")
+    def_processed_path = _default_mermaid_subdir("processed")
+    def_database_path = _default_mermaid_subdir("database")
+
+    # problem: metavar=''   prints: "-s , --server"
+    # problem: metavar='\b' prints: "-s, --server", but misaligns the help statement...
+    parser.add_argument('-s',
+                        '--server',
+                        default=def_server_path,
+                        dest='server',
+                        #metavar='\b',
+                        help=_path_help("server", def_server_path))
+    parser.add_argument('-p',
+                        '--processed',
+                        default=def_processed_path,
+                        dest='processed',
+                        #metavar='',
+                        help=_path_help("processed", def_processed_path))
+    parser.add_argument('-d',
+                        '--database',
+                        default=def_database_path,
+                        dest='database',
+                        #metavar='',
+                        help=_path_help("database", def_database_path))
+    return parser
+
+
+def _resolve_paths(server, processed, database, parser=None):
+    missing = []
+    if server is None:
+        missing.append("--server")
+    if processed is None:
+        missing.append("--processed")
+    if database is None:
+        missing.append("--database")
+
+    if missing:
+        message = (
+            "missing {:s}; provide explicit paths or set MERMAID to a directory "
+            "containing server/, processed/, and database/ subdirectories"
+        ).format(", ".join(missing))
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+
+    return os.path.abspath(server), os.path.abspath(processed), os.path.abspath(database)
 
 # Set an inclusive time range of analysis for a specific float
 # (by default, deployment to present...adjust here or there)
@@ -145,7 +180,28 @@ def sort_mfloats(a,b):
     nbB = int(buoy_nbB,10)
     return nbA - nbB
 
-def main():
+def main(argv=None, server=None, processed=None, database=None):
+    global server_path, processed_path, database_path
+
+    if server is None or processed is None or database is None:
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        server = server if server is not None else args.server
+        processed = processed if processed is not None else args.processed
+        database = database if database is not None else args.database
+        server_path, processed_path, database_path = _resolve_paths(
+            server,
+            processed,
+            database,
+            parser=parser,
+        )
+    else:
+        server_path, processed_path, database_path = _resolve_paths(
+            server,
+            processed,
+            database,
+        )
+
     # Set working directory in "scripts"
     os.chdir(scripts_path)
 

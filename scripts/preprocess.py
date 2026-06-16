@@ -25,8 +25,8 @@ import functools
 import utils
 from obspy import UTCDateTime
 
-mermaid_path = os.environ["MERMAID"]
-database_path = os.path.join(mermaid_path, "database")
+mermaid_path = os.environ.get("MERMAID")
+database_path = os.path.join(mermaid_path, "database") if mermaid_path else None
 
 
 DATABASE_LINK_NAME = "Databases.json"
@@ -48,12 +48,16 @@ def database_update(path):
     path -- Path to store databases, can be null (defaut : os.environ["MERMAID"]/database)
 
     '''
+    global database_path
+
     print("Update Databases")
     network = 1
     database_list = []
     if path :
-        global database_path
         database_path = path
+    elif database_path is None:
+        print("No database path provided and MERMAID is unset; skipping database update")
+        return
     try:
         # Get linker file (link database and profiler version)
         url = 'http://mermaid.osean.fr/databases/' + DATABASE_LINK_NAME

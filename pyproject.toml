@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "automaid"
+version = "4.5.3"
+description = "Process MERMAID files into seismic and float-derived products."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "EarthScope-Oceans Consortium" },
+]
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "obspy",
+    "plotly",
+    "pytz",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+automaid = "automaid.cli:main"
+
+[tool.setuptools]
+packages = ["automaid"]

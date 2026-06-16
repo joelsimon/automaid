@@ -1,101 +1,95 @@
-__automaid__, a Python package to process MERMAID files.
+automaid
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5057096.svg)](https://doi.org/10.5281/zenodo.5057096)
+Python tools for processing MERMAID instrument data.
 
-This program converts raw data transmitted by MERMAID instruments to classify
-their data, correct clock drifts, interpolate float positions, generate seismic
-SAC and miniSEED files, plot seismic events and dives, and generate KML files.
+automaid converts raw MERMAID transmissions into processed scientific products, including:
 
-Continually developed by @joelsimon (jdsimon@princeton.edu).  Originally written
-by @sebastienbx .  Many v3.6+ additions for generation 3+ MERMAID floats (.BIN
-decryption, CTD profiling, etc.) coded by @oseanfro.
+* data classification and organization
+* clock-drift correction
+* float-position interpolation
+* seismic SAC and miniSEED generation
+* event and dive visualizations
+* KML export products
 
-### 1. INSTALLATION
+Authors
 
-This installation procedure has been tested with linux
+* @joelsimon
+* @sebastienbx
+* @oseanfro
 
-An easy installation procedure is described here:
+Installation
 
-* Install [Miniconda](https://conda.io/miniconda.html) or
-  [Anaconda](https://www.anaconda.com/download/) (which requires more
-  disk space). (You may already have it, you might have to do `module
-  load anaconda/5.2.0` to specify the precise version).
-* Restart your terminal to load the new PATH variables.
-* Add the conda-forge channel:
-  `conda config --add channels conda-forge`
-* Activate the environment:
-  `source activate pymaid`
-* Make sure you are in the `bash` shell!
-* Create a virtual environment called "pymaid" with required packages:<br>
-  `conda create -n pymaid python=3.10 obspy plotly`<br>
-* Quit the virtual environment:
-  `source deactivate`
+Create a virtual environment and install automaid in editable mode:
 
-JDS note for future cleanup: also had to install pytz<br>
-`conda create -n pymaid3.10 python=3.10 obspy plotly`<br>
-`conda install -n pymaid3.10 pytz`<br>
+python3.14 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 
-In addition to the Python 3.10 installation it is necessary to compile,
-using `make` the wavelet inversion programs located in
-`scripts/src/V103/` and `scripts/src/V103EC/`. The compiled binaries
-must be in the "bin" directory and must be named `icdf24_v103_test` and
-`icdf24_v103ec_test`.
+Native dependencies
 
-Finally, ensure the environmental variable, `MERMAID`, is set as a directory
-containing "server/" and "processed/" subdirectories.  These defaults may be
-overridden at execution using the `--server` and `--processed` arguments.
+The legacy processing workflow requires two platform-specific wavelet inversion executables.
 
-### 2. USAGE
+Build them locally and copy them into scripts/bin/:
 
-To use the application:
+cd scripts/src/V103
+make
+cp icdf24_v103_test ../../bin/
+cd ../V103EC
+make
+cp icdf24_v103ec_test ../../bin/
+cd ../../..
 
-* Copy files from your MERMAID server into the "$MERMAID/server" directory:
-  `scp username@host:\{"*.LOG","*.MER","*.S61","*.vit"\} server`
-* Activate the virtual environment:
-  `source activate pymaid` or `conda activate pymaid` or (if "conda" not found)
-  e.g., `source /Users/joelsimon/anaconda3/etc/profile.d/conda.sh ; conda  activate pymaid`
-* Run main.py, optionally describing -p <processed> -s <server>
-* Quit the virtual environment:
-  `source deactivate`
+Required executable paths:
 
-You will be getting the processed files into the directory `$MERMAID/processed`.
-You may have to remove some error-prone log files and create some directories -
-we will be editing the script for increased versatility as we go along.
+scripts/bin/icdf24_v103_test
+scripts/bin/icdf24_v103ec_test
 
-The "main.py" file can be edited to select some options:
+Usage
 
-* A date range between which to process the data can be chosen with
-the `begin` and `end` variables.
-* A "redo" flag can be set to True in order to restart the processing
-of data for each launch of the script. This flag force the deletion
-of the content of the content of the `processed` directory.
-* A `events_plotly` flag allow the user to plot interactive figures
-of events in a html page. This kind of plot can be disabled to save
-disk space.
+Run the package CLI:
 
-#### 3. SUMMARY OF ABOVE TO CLONE, CHECKOUT DEVELOPMENT BRANCH (V3.6.0), AND EXECUTE
-```
-    $ cd ~/Desktop/
-    $ git clone https://github.com/earthscopeoceans/automaid.git
-    $ cd automaid/scripts/src/V103
-    $ make
-    $ mv icdf24_v103_test ../../bin/
-    $ cd ../V103EC
-    $ make
-    $ mv icdf24_v103ec_test ../../bin
-    $ cd ../..
-    $ git checkout v3.6.0
-    $ conda activate pymaid                     # or `source activate pymaid`
-    $ python main.py -s <server> -p <processed> # replace "<*>" with full paths ending in "/"
-    $ conda deactivate                          # or `source deactivate`
-```
+automaid process \
+    --server /path/to/server \
+    --processed /path/to/processed \
+    --database /path/to/database
 
-### 4. CITATION
+Equivalent short flags:
 
-Joel D. Simon, Sébastien Bonnieux, Frédéric Rocca, Frederik J Simons &
-The EarthScope-Oceans Consortium. (2024). earthscopeoceans/automaid: v4.0.0.
-Zenodo, https://doi.org/10.5281/zenodo.5057096.
+automaid process -s /path/to/server -p /path/to/processed -d /path/to/database
 
-<sup>1</sup>One-liner of conda install including all packages suggested by
-Dalija Namjesnik after she and Joel Simon struggled with an install in May 2023;
-similar to note 2 below, this should also probably be validated...
+Before processing begins, the CLI verifies:
+
+* input paths exist
+* output directories exist or can be created
+* required native executables are present and executable
+
+Legacy entry point
+
+The original script entry point remains available:
+
+python scripts/main.py \
+    --server /path/to/server \
+    --processed /path/to/processed \
+    --database /path/to/database
+
+If the MERMAID environment variable points to a directory containing:
+
+server/
+processed/
+database/
+
+the legacy workflow can use those locations as defaults.
+
+### Limitations
+Some legacy processing options remain configured within the legacy workflow and have not yet been exposed through the CLI.
+
+### Citation
+
+Simon, J. D., Bonnieux, S., Rocca, F., Simons, F. J., & The EarthScope-Oceans Consortium (2024).
+
+earthscopeoceans/automaid: v4.0.0.
+
+Zenodo.
+
+https://doi.org/10.5281/zenodo.5057096
