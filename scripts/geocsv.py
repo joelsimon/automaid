@@ -17,6 +17,7 @@
 # *Verify types and signs, e.g. for 'time correction/delay' ([+/-]np.int32)
 
 import csv
+import hashlib
 import pytz
 import datetime
 import numpy as np
@@ -256,14 +257,8 @@ class GeoCSV:
             ## !! Is this condition good enough / algorithm rows match DET SAC? !!
             event_list = [event for log in cycle.logs for event in log.events if event.obspy_trace_stats]
 
-            # Initialize a "previous" row to check for redundancies
-            # This can occur when, e.g., a REQ file is multiply requested
-            # For example: these are identical, so only one line is written to GeoCSV
-            #     '20180713T094801.07_5B6DEE36.MER.REQ.WLT5.sac'
-            #     '20180713T094801.07_5B7739F0.MER.REQ.WLT5.sac'
-            det_algo_rows = []
-            req_algo_rows = []
-            prev_algorithm_row = []
+            det_algo_records = []
+            req_algo_records = []
             for event in sorted(event_list, key=lambda x: x.corrected_starttime):
                 if event.station_loc_is_preliminary:
                     continue
@@ -287,25 +282,83 @@ class GeoCSV:
                     d6(event.mseed_time_correction)
                 ]
 
-                if algorithm_row != prev_algorithm_row:
-                    if event.is_requested:
-                        req_algo_rows.append(algorithm_row)
+                if event.is_requested:
+                    req_algo_records.append((algorithm_row, event))
 
-                    else:
-                        # Sanity checks just to make sure all "depth" units in their expected mbar
-                        # The manual says 1 m = 101 mbar; automaid has always assumed 1 m = 1 dbar = 100 mbar
-                        # (MERMAID manual Réf : 452.000.852 Version 00)
-                        if event.pressure_dbar * 100 != event.pressure_mbar:
-                            raise ValueError("Expected 100 mbar to equal 1 dbar")
+                else:
+                    # Sanity checks just to make sure all "depth" units in their expected mbar
+                    # The manual says 1 m = 101 mbar; automaid has always assumed 1 m = 1 dbar = 100 mbar
+                    # (MERMAID manual Réf : 452.000.852 Version 00)
+                    if event.pressure_dbar * 100 != event.pressure_mbar:
+                        raise ValueError("Expected 100 mbar to equal 1 dbar")
 
-                        if event.pressure_dbar is not event.obspy_trace_stats.sac["stdp"]:
-                            raise ValueError("`stdp` (roughly meters) should be the dbar pressure from .MER")
+                    if event.pressure_dbar is not event.obspy_trace_stats.sac["stdp"]:
+                        raise ValueError("`stdp` (roughly meters) should be the dbar pressure from .MER")
 
-                        det_algo_rows.append(algorithm_row)
+                    det_algo_records.append((algorithm_row, event))
 
-                prev_algorithm_row = algorithm_row
+            return (det_algo_records, req_algo_records)
 
-            return (det_algo_rows, req_algo_rows)
+        def deduplicate_algo_event_rows(algo_records):
+            """Return unique event rows and groups with conflicting event data.
+
+            Rows are deduplicated only when both the raw event header and raw
+            payload bytes are identical.  Distinct event data that render to the
+            same GeoCSV row are retained in the clash record for human review;
+            only the first such row is written so that the GeoCSV remains unique.
+            """
+
+            row_variants = {}
+            unique_rows = []
+            for row, event in algo_records:
+                # Use the values as rendered in GeoCSV, including a stable
+                # representation of NaN, to find duplicate output rows.
+                row_key = tuple(str(value) for value in row)
+                event_data = (event.mer_binary_header, event.mer_binary_binary)
+                variants = row_variants.setdefault(row_key, [])
+
+                for variant in variants:
+                    if event_data == variant['event_data']:
+                        variant['mer_binary_names'].append(event.mer_binary_name)
+                        break
+                else:
+                    variants.append({
+                        'event_data': event_data,
+                        'mer_binary_names': [event.mer_binary_name],
+                        'row': row,
+                    })
+                    if len(variants) == 1:
+                        unique_rows.append(row)
+
+            clashes = [variants for variants in row_variants.values()
+                       if len(variants) > 1]
+            return unique_rows, clashes
+
+        def write_clash_report(report_name, clashes):
+            """Write event data that collide in a GeoCSV row for review."""
+
+            with open(report_name, 'w') as report:
+                report.write('# GeoCSV event-data clashes\n\n')
+                report.write('Each group below rendered to one identical GeoCSV '
+                             'row, but its event header and/or raw data payload '
+                             'differed.  The first variant was retained in the '
+                             'corresponding GeoCSV; all variants are listed here.\n')
+
+                for clash_index, variants in enumerate(clashes, start=1):
+                    report.write('\n## Clash {}\n\n'.format(clash_index))
+                    report.write('```text\n{}\n```\n\n'.format(
+                        self.delimiter.join(str(value) for value in variants[0]['row'])))
+                    report.write('| Event data variant | Source MER files | Header SHA-256 | '
+                                 'Payload bytes | Payload SHA-256 |\n')
+                    report.write('| --- | --- | --- | ---: | --- |\n')
+                    for variant_index, variant in enumerate(variants, start=1):
+                        header, payload = variant['event_data']
+                        report.write('| {} | `{}` | `{}` | {} | `{}` |\n'.format(
+                            variant_index,
+                            '`, `'.join(variant['mer_binary_names']),
+                            hashlib.sha256(header).hexdigest(),
+                            len(payload),
+                            hashlib.sha256(payload).hexdigest()))
 
         def format_algo_thermo_rows(cycle):
             """Format GeoCSV rows of interpolated dates and lat/lons of des(as)cending into(out of) the thermocline
@@ -350,8 +403,8 @@ class GeoCSV:
 
         # Build lists of formatted strings to be written to each GeoCSV
         gps_rows = []
-        det_algo_rows = []
-        req_algo_rows = []
+        det_algo_records = []
+        req_algo_records = []
         thermo_algo_rows = []
         press_rows = []
         for cycle in self.cycles:
@@ -359,10 +412,10 @@ class GeoCSV:
             gps_rows.extend(format_gps_rows(cycle))
             press_rows.extend(format_press_rows(cycle))
 
-            # "Algorithm"-event formatted lists returned as (DET, REQ) tuple
+            # "Algorithm" event rows, paired with their source Event instances
             algo_rows_tup = format_algo_event_rows(cycle)
-            det_algo_rows.extend(algo_rows_tup[0])
-            req_algo_rows.extend(algo_rows_tup[1])
+            det_algo_records.extend(algo_rows_tup[0])
+            req_algo_records.extend(algo_rows_tup[1])
 
             # "Algorithm"-thermocline formatted rows
             thermo_algo_rows.extend(format_algo_thermo_rows(cycle))
@@ -379,10 +432,18 @@ class GeoCSV:
         # The "Measurement:" rows are "GPS" and "Pressure"
         meas_rows = gps_rows + press_rows
 
+        # Deduplicate each GeoCSV independently: an event may occur in the
+        # combined DET_REQ file without occurring in the corresponding DET or
+        # REQ file.
+        det_algo_rows, det_clashes = deduplicate_algo_event_rows(det_algo_records)
+        req_algo_rows, req_clashes = deduplicate_algo_event_rows(req_algo_records)
+        det_req_algo_rows, det_req_clashes = deduplicate_algo_event_rows(
+            det_algo_records + req_algo_records)
+
         # The complete file combines "Measurement" and "Algorithm" rows
         geocsv_det_rows = meas_rows + det_algo_rows + thermo_algo_rows
         geocsv_req_rows = meas_rows + req_algo_rows + thermo_algo_rows
-        geocsv_det_req_rows = meas_rows + det_algo_rows + req_algo_rows + thermo_algo_rows
+        geocsv_det_req_rows = meas_rows + det_req_algo_rows + thermo_algo_rows
 
         # Sort the combined rows by date
         geocsv_det_req_rows.sort(key=lambda x: x[1])
@@ -446,3 +507,18 @@ class GeoCSV:
                     nunique = [k for (k,v) in Counter(str_rows).items() if v > 1]
                     print(nunique)
                     raise ValueError("{} rows not unique\n".format(csvfile.name))
+
+        clash_reports = [
+            (basename+'_DET_REQ-CLASHES.md', det_req_clashes),
+            (basename+'_DET-CLASHES.md', det_clashes),
+            (basename+'_REQ-CLASHES.md', req_clashes),
+        ]
+        written_clash_reports = []
+        for report_name, clashes in clash_reports:
+            if clashes:
+                write_clash_report(report_name, clashes)
+                written_clash_reports.append(report_name)
+
+        if written_clash_reports:
+            print("WARNING: distinct event data rendered to duplicate GeoCSV rows; "
+                  "review {}".format(', '.join(written_clash_reports)))
