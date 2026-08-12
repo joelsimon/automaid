@@ -1,20 +1,21 @@
-function readmhpsd_example()
-% READMHPSD_EXAMPLE
+function readmhpsd_example(filename)
+% READMHPSD_EXAMPLE(filename)
 %
 % Read and plot an .mhpsd file in MATLAB.
 %
 % Relies on functions in $OMNIA, in particular `readmhpsd` --
 % https://github.com/joelsimon/omnia.git
 %
-% Author: Joel D. Simon
-% Contact: jdsimon@alumni.princeton.edu | joeldsimon@gmail.com
-% Last modified: 25-Apr-2023, Version 9.3.0.948333 (R2017b) Update 9 on MACI64
+% Author: Joel D. Simon <jdsimon@bathymetrix.com>
+% Last modified: 29-Jul-2026, 9.13.0.2553342 (R2022b) Update 9 on MACI64 (geo_mac)
+% (in reality: Intel MATLAB in Rosetta 2 running on an Apple silicon Mac)
 
 clc
 close all
 
+defval('filename', '20211116T125142.0002_6194A40E.MER.STD.mhpsd')
+
 % Read the MERMAID Hydrophone Power-Spectral-Density file.
-filename = '20211116T125142.0002_6194A40E.MER.STD.mhpsd';
 [hdr, psd] = readmhpsd(filename);
 
 % Display the header info (similar to a SAC header).
