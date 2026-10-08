@@ -276,7 +276,7 @@ class GeoCSV:
                     nan,
                     d0(event.pressure_mbar),
                     'MERMAIDHydrophone({:s})'.format(cycle.kinst),
-                    d1(event.obspy_trace_stats["sampling_rate"]),
+                    d6(event.obspy_trace_stats["sampling_rate"]),
                     event.obspy_trace_stats["npts"],
                     nan,
                     d6(event.mseed_time_correction)
@@ -490,9 +490,11 @@ class GeoCSV:
             csvwriter_req = csv.writer(csvfile_req, delimiter=self.delimiter, lineterminator=self.lineterminator)
 
             # Write the same comment lines and single header to all three files
+            csvfile_list = [csvfile_det_req, csvfile_det, csvfile_req]
             csvwriter_list = [csvwriter_det_req, csvwriter_det, csvwriter_req]
-            for csvwriter in csvwriter_list:
-                csvwriter.writerows(self.get_comment_lines())
+            for csvfile, csvwriter in zip(csvfile_list, csvwriter_list):
+                for comment_fields in self.get_comment_lines():
+                    csvfile.write(self.delimiter.join(comment_fields) + self.lineterminator)
                 csvwriter.writerow(self.header)
 
             # Write the combined "Measurement" and "Algorithm" rows to all three files
