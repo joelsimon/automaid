@@ -15,6 +15,7 @@ Argo profile files.
 - [What the file formats are](CTD_file_formats.md): Argo profile formats and automaid's current SAL/TEMP-related outputs.
 - [Argo pathway goals](CTD_argo_goals.md): near-term example-shaped NetCDF and long-term archive pathway.
 - [Near-term NetCDF checklist](CTD_netcdf_checklist.md): tasks for the pseudo-compliant prototype.
+- [CTD open questions](CTD_open_questions.md): unresolved timing and position questions, including Argo `JULD` versus `JULD_LOCATION`.
 
 These pages summarize external standards and current code behavior. They do not
 make automaid an Argo DAC, GDAC, or format-compliant producer.

@@ -14,6 +14,7 @@ import sys
 import struct
 import datetime
 import warnings
+import csv
 import numpy as np
 import plotly.graph_objs as graph
 
@@ -24,6 +25,25 @@ import setup
 
 # Get current version number.
 version = setup.get_version()
+
+
+def write_ctd_profile(path, pressure, temperature, salinity, gps_fix=None):
+    """Write a temporary CTD profile with post-profile GPS metadata."""
+    with open(path, mode="w", newline="") as ctd_file:
+        if gps_fix is None:
+            ctd_file.write("# gps_utc: unavailable\n")
+            ctd_file.write("# gps_lat: unavailable\n")
+            ctd_file.write("# gps_lon: unavailable\n")
+        else:
+            fix_time = UTCDateTime(gps_fix.date).strftime("%Y-%m-%dT%H:%M:%SZ")
+            ctd_file.write(f"# gps_utc: {fix_time}\n")
+            ctd_file.write(f"# gps_lat: {gps_fix.latitude:.6f}\n")
+            ctd_file.write(f"# gps_lon: {gps_fix.longitude:.6f}\n")
+
+        ctd_file.write("\n#press_dbar,temp_c,salt_psu\n")
+        writer = csv.writer(
+            ctd_file, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+        writer.writerows(zip(pressure, temperature, salinity))
 
 #
 # LOG file utilities

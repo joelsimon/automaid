@@ -209,6 +209,19 @@ class Profile:
         else:
             print((export_path + " can't be exploited for csv data"))
 
+    def write_ctd(self, export_path, gps_fix=None):
+        if list(self.data):
+            export_name = UTCDateTime.strftime(UTCDateTime(self.date), "%Y%m%dT%H%M%S") + \
+                "." + self.file_name + ".ctd"
+            utils.write_ctd_profile(
+                export_path + export_name,
+                self.data_pressure,
+                self.data_temperature,
+                self.data_salinity,
+                gps_fix)
+        else:
+            print((export_path + " can't be exploited for ctd data"))
+
     def write_temperature_html(self, export_path, optimize=False, include_plotly=True):
         if list(self.data):
             # Check if file exist

@@ -63,8 +63,14 @@ Code inspection found the following profile outputs:
 - `main.py` has a CSV output switch set to `True` and calls the profile CSV
   writers.
 - The SBE41, SBE61, and RBR profile writers write a semicolon-separated CSV
-  containing pressure, temperature, and salinity values. The SBE writers do
-  not write a header row or Argo metadata, QC flags, or location fields.
+  containing pressure, temperature, and salinity values. The existing `.csv`
+  outputs remain unchanged and have no header row or location fields.
+- SBE41 and SBE61 profiles also write a temporary `.ctd` companion. It retains
+  the same semicolon-separated data rows and adds commented headers for the
+  timestamp, latitude, and longitude of the first GPS fix after the profile.
+  If no usable post-profile fix is available, those values say `unavailable`.
+  This is a project-specific interim format, not an exact implementation of
+  Argo `JULD`/`JULD_LOCATION` or a submission-ready Argo product.
 - These profile CSVs are **not Argo core-profile files** and are not an Argo
   submission format. They also are not separate SAL and TEMP CSV files.
 - The per-parameter SAL and TEMP outputs found in the code are HTML plots.
@@ -72,8 +78,8 @@ Code inspection found the following profile outputs:
   pressure, event, and thermocline metadata. That GeoCSV output is not a CTD
   profile export and is not an alternate Argo NetCDF product.
 
-For example, the code's SBE CSV contains rows shaped like this, with no header
-or location fields:
+For example, the existing SBE `.csv` contains rows shaped like this, with no
+header or location fields:
 
 ```text
 10.0;18.42;34.91
@@ -82,6 +88,21 @@ or location fields:
 
 Columns are pressure, temperature, and salinity, respectively. Values above
 are illustrative, not copied from an actual MERMAID profile.
+
+The temporary `.ctd` companion keeps those same data rows, preceded by
+commented metadata such as:
+
+```text
+# TEMPORARY CTD format: adds location/time metadata; not an exact Argo JULD implementation
+# gps_fix_time_utc: 2026-09-24T00:57:06Z
+# latitude_deg_north: 12.345
+# longitude_deg_east: -67.890
+# gps_fix_selection: first GPS fix after CTD profile
+```
+
+The example metadata above is illustrative. The timestamp and coordinates come
+from the same GPS fix. `gps_fix_time_utc` is deliberately named as the GPS-fix
+time; it is not asserted to be the profile time or Argo `JULD`.
 
 Relevant implementation: [`main.py`](../scripts/main.py),
 [`cycles.py`](../scripts/cycles.py), [`sbe41.py`](../scripts/sbe41.py),

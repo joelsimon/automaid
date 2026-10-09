@@ -1087,12 +1087,27 @@ class Cycle:
         if self.profilesS41 :
             for profile in self.profilesS41:
                 profile.write_csv(self.processed_path)
+                gps_fix = self.first_gps_fix_after_profile(profile)
+                profile.write_ctd(self.processed_path, gps_fix)
         if self.profilesS61 :
             for profile in self.profilesS61:
                 profile.write_csv(self.processed_path)
+                gps_fix = self.first_gps_fix_after_profile(profile)
+                profile.write_ctd(self.processed_path, gps_fix)
         if self.profilesRBR :
             for profile in self.profilesRBR:
                 profile.write_csv(self.processed_path)
+
+    def first_gps_fix_after_profile(self, profile):
+        """Return the earliest cycle GPS fix after a CTD profile timestamp."""
+        post_profile_fixes = [
+            gps for gps in self.gps_list
+            if gps.date is not None
+            and profile.date < gps.date
+            and gps.latitude is not None
+            and gps.longitude is not None
+        ]
+        return min(post_profile_fixes, key=lambda gps: gps.date, default=None)
 
     def write_events_sac(self):
         for event in self.events:
