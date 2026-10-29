@@ -647,11 +647,19 @@ def write_gps(cycles, creation_datestr, processed_path, mfloat_path):
 
 
 def write_gps_interpolation_txt(cycles, creation_datestr, processed_path, mfloat_path):
-    '''Writes MERMAID GPS interpolation file, detailing GPS and interpolation parameters for the three
+    ''' !!! WARNING WARNING WARNING !!!
+    !!!
+    !!! Term "mixed layer" is OPPOSITE accepted convention (Nolet+2024, doi.org/10.1785/0220230377)
+    !!!
+    !!! Here:                  Correct:
+    !!! surface layer <------> mixed layer
+    !!! mixed layer <--------> deep layer
+    !!!
+    !!! WARNING WARNING WARNING !!!
+
+    Writes MERMAID GPS interpolation file, detailing GPS and interpolation parameters for the three
     main regimes of each dive: descent and drift in the surface layer, drift in the mixed layer, and
     ascent and drift in the surface layer.
-
-
     '''
 
     # NB, the comments here assume a normal dive where all GPS fixes are obtained and MERMAID dives
