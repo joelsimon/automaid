@@ -72,6 +72,12 @@ files by type: GeoCSV as `<instrument_id>.geocsv`, GPS as
 mseed2sac metadata CSVs under their respective directories. Duplicate
 waveform or metadata mirror filenames cause processing to fail.
 
+After all outputs and mirrors are written successfully, write permissions are
+removed from every file and directory in the processed tree. Canonical files
+are therefore read-only through their mirror symlinks as well. Subsequent
+processing requires a fresh writable output directory or explicit restoration
+of write permissions. See [processed output permissions](docs/processed-output-permissions.md).
+
 The "main.py" file can be edited to select some options:
 
 * A date range between which to process the data can be chosen with

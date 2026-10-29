@@ -13,6 +13,7 @@ import re
 import sys
 import struct
 import os
+import stat
 import datetime
 import warnings
 import csv
@@ -520,6 +521,27 @@ def princeton_mermaids():
     """
 
     return {f"452.020-P-{i:02}" for i in range(8, 26)}
+
+
+def make_processed_read_only(processed_path):
+    """Remove write permissions from the completed tree without following links."""
+    processed_dir = Path(processed_path).expanduser().resolve()
+    if not processed_dir.is_dir():
+        raise ValueError(f"Processed directory does not exist: {processed_dir}")
+
+    def raise_walk_error(error):
+        raise error
+
+    # Lock children before parents so the tree remains traversable throughout.
+    for directory, subdirectories, filenames in os.walk(
+        processed_dir, topdown=False, onerror=raise_walk_error,
+    ):
+        directory = Path(directory)
+        for name in filenames:
+            path = directory / name
+            if not path.is_symlink():
+                path.chmod(stat.S_IMODE(path.stat().st_mode) & ~0o222)
+        directory.chmod(stat.S_IMODE(directory.stat().st_mode) & ~0o222)
 
 
 def rebuild_processed_mirrors(processed_path, mirror_base_path):

@@ -413,5 +413,8 @@ def main():
     # point adjustment is required)
     vitals.write_corrected_pressure_offset(lastcycle, processed_path)
 
+    # Protect canonical outputs, including access through the symlink mirrors.
+    utils.make_processed_read_only(processed_path)
+
 if __name__ == "__main__":
     main()
