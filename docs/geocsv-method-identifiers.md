@@ -1,136 +1,168 @@
-> **AI-written documentation — non-authoritative.** Verify scientific and format details against the linked source code and the recorded revision before relying on them.
+> **AI-written documentation — non-authoritative.** Verify scientific and format details against the linked sources before relying on them.
 
-# GeoCSV method identifiers and row times
+# GeoCSV migration decisions
 
-Paired design note: [mermaid-geocsv](../../mermaid-geocsv/docs/geocsv-method-identifiers.md). Both notes must be maintained together.
+Paired design note: [mermaid-geocsv](../../mermaid-geocsv/docs/geocsv-method-identifiers.md). Keep both notes synchronized. Execution plan: [four-repository migration](geocsv-migration-plan.md).
 
-## Status and scope
+Status: planned replacement format, recorded 2026-10-29; not implemented by
+this document. Legacy MERMAID GeoCSV versions are unsupported: no legacy
+reader/writer path, aliases or automatic fallback. The reader supports this
+controlled MERMAID profile, not arbitrary GeoCSV dialects or schemas.
 
-Design discussion recorded on 2026-10-29. The three-component identifier
-structure and a common row timestamp are agreed design directions. The field
-labels and subject spellings below are proposals awaiting final selection.
-Existing producer labels and the `StartTime` column remain implemented behavior.
-No format migration or scientific behavior change is implemented by this note.
+The planned first header line is exactly:
 
-Geographic values describe the MERMAID receiver (station). The historical
-`Algorithm(event)` label refers to recording metadata, not earthquake-source
-parameters. A recording row includes the original waveform segment's first
-sample time, station position at that time, identity, sampling rate, and sample
-count. A later request, download, or clipped window is distinct from that
-original segment.
+```text
+# MERMAID GeoCSV schema: 1.0.0
+```
 
-## Proposed identifier terminology
+Emit it once, without a trailing period, alongside the existing GeoCSV metadata.
+The reader requires the supported schema declaration and rejects missing or
+unsupported revisions clearly. Preserve it in parsed and association provenance.
+Schema versioning is independent of producer/package versions and release IDs;
+this does not authorize a software 1.0.0 release or require legacy support.
 
-Use `Method:Subject:Source` as the proposed names for the three components of
-`MethodIdentifier`:
+## Agreed names
 
-| Component | Meaning | Reason for this name |
-| --- | --- | --- |
-| `Method` | How the row's principal values were obtained: `Measurement` or `Interpolation`. | Describes derivation without suggesting a programming-language data type. |
-| `Subject` | What the row describes, including the relevant context or epoch. | Covers both a physical quantity such as pressure and a contextual quantity such as position at recording start; `ValueType` could be mistaken for a data type. |
-| `Source` | Sensor model or producing software and its version. | Fits both kinds of provenance and avoids the earthquake-related interpretation of `Origin`. |
-
-Identifiers have exactly three nonempty components separated by two colons.
-The source component combines software name and version into one token, such
-as `automaid-v4.5.14`; it does not contain a colon. That example demonstrates
-spelling only and does not claim that the historical version emits new labels.
-Actual future output must identify its actual producer version.
-
-Proposed templates:
+`MethodIdentifier` has exactly three nonempty colon-separated components:
+`Method:Subject:Source`.
 
 ```text
 Measurement:Position:<GPS-sensor>
-Measurement:Pressure:<pressure-sensor>
-Interpolation:RecordingStartPosition:automaid-<version>
-Interpolation:LayerCrossingPosition:automaid-<version>
+Measurement:Pressure-Absolute:<pressure-sensor>
+Derivation:Recording:automaid-<version>
+Interpolation:Crossing-Descent:automaid-<version>
+Interpolation:Crossing-Ascent:automaid-<version>
 ```
 
-`Position` means geographic station position. The existing `Location` column
-has the separate SEED location-code meaning. `RecordingStartPosition` identifies
-the spatial purpose of a recording row; its timing is also corrected using an
-interpolated clock-drift estimate. The identifier does not imply that waveform
-samples or every other column were interpolated.
+The source identifies the actual sensor or producer version. Parse colons first;
+hyphens within source names remain part of that source. Both crossing subjects
+may be grouped as `Crossing`. No direction column is added.
 
-`LayerCrossingPosition` describes a crossing of the configured layer boundary.
-The current calculation uses `mixed_layer_depth_m`; it does not determine the
-thermocline depth from a temperature profile in this operation. Selection of
-this name, or a more specific boundary name, remains part of the design review.
+Rename `StartTime` to `Time`. `Recording` describes an original waveform segment,
+including its corrected first-sample epoch, station position, sample rate and
+count. `Position` is geographic station position; `Location` remains the SEED
+location code. Rename `TimeDelay` to `ClockOffset` and `TimeCorrection` to
+`AppliedClockCorrection`, with their existing values, signs and second units
+unchanged. Other column names and units remain unchanged unless separately
+specified. Absolute-pressure labeling does not introduce atmospheric correction.
 
-## Common row timestamp and current producer behavior
+In the writer, **Recording rows only** emit `Elevation = 0 m`, explicitly
+representing the adopted sea-level reference rather than the submerged sensor's
+physical elevation. Other row kinds keep Elevation absent. The reader preserves
+both the explicit zero and absence; it never supplies a default. Association's
+approved elevation projections use the Recording source value instead of
+inventing zero. Remove the existing hard-coded zero for SAC `stel` and coordinate
+elevation; missing required source Elevation raises. This replaces the current
+missing Recording Elevation, not the writer's scientific depth calculation.
 
-Every row emitted by the current MERMAID GeoCSV writer requires `StartTime`.
-The planned common name `Time` better describes all four row types: only a
-recording row specifically represents a start. The eventual column rename is
-a coordinated producer/consumer format change, not an implemented alias.
+Repository-wide rule: never substitute defaults for missing, unknown, invalid
+or unavailable source metadata in parsing, association, projections or
+provenance. Optional values remain missing; required values raise. Preserve
+explicit source values without silent repair or filling from another record.
 
-Time is the row's common reference epoch. It is not necessarily independently
-measured: position estimates can depend on the timestamp, and timestamp
-provenance differs between row types.
+## Clock definitions and source mappings
 
-| Row | Meaning of timestamp | Recording clock-drift correction |
-| --- | --- | --- |
-| GPS position measurement | Timestamp attached to the GPS fix, as supplied by the source parsing path. | Not applied by the recording correction routine. |
-| Pressure measurement | Timestamp of the pressure-log entry. | Not applied. |
-| Recording start position | Corrected time of the original waveform segment's first sample. | An interpolated drift correction is added before station-position estimation. |
-| Layer-crossing position | Intended to be the estimated time of crossing the configured depth boundary; see the fallback finding below. | Crossing time is interpolated from pressure-log timestamps without applying the recording correction. |
+Reserve clock "drift" for the manual's DRIFT/GPSACK definition:
 
-For recordings, the current sequence is:
+```text
+drift = gps_time - mermaid_time
+ClockOffset = mermaid_time - gps_time = -drift
+```
 
-1. Compute the uncorrected first-sample time from recording metadata.
-2. Estimate clock drift at that time using the bounding GPS synchronization data.
-3. Set `corrected_starttime = uncorrected_starttime + clockdrift_correction`.
-4. Request station-position interpolation at the corrected time.
-5. Write waveform Stats start time to the GeoCSV recording row.
+`ClockOffset` is the observed-minus-reference time difference at a GPS fix,
+in seconds: positive means the instrument clock is ahead. Its current source
+is `gps.mseed_time_delay`, which is already `-gps.clockdrift`. The proposed
+`ClockDrift` column is withdrawn; no GPS-column sign reversal is selected.
 
-For layer crossings, estimate the crossing time from pressure values and log
-timestamps, then request GPS interpolation at that time. The recording clock
-correction routine operates on recording objects and does not correct those
-pressure timestamps or crossing times. A timestamp column alone does not imply
-identical timing provenance or accuracy across row types.
+`AppliedClockCorrection` is `event.mseed_time_correction`, the clock correction
+already added to the uncorrected original recording start, in seconds:
 
-## Open finding: interpolation fallback can replace the row epoch
+```text
+Time = uncorrected_starttime + AppliedClockCorrection
+AppliedClockCorrection = -estimated_ClockOffset_at_recording_time
+```
 
-The current `gps.linear_interpolation()` helper can replace the requested
-interpolation time with an input GPS timestamp:
+Positive correction moves the recording timestamp later; negative moves it
+earlier. The correction uses the drift sign, opposite to the offset evaluated
+at that same epoch. GPS-fix offsets and recording corrections refer to different
+epochs and need not have equal magnitudes. Never apply the correction again.
 
-- A single input fix returns that fix's position and timestamp.
-- Retained fixes less than 20 metres apart return an input position and timestamp.
+The current source computes `clockdrift_correction = ascent.clockdrift * pct`,
+then sets `mseed_time_correction = clockdrift_correction` and adds it to the
+uncorrected start. These are definitions of existing behavior, not changes to
+clock processing. The source mapping was checked at automaid commit
+`3d183c1636f92c7fe8619b02adc5892500dbd208`: 24 extracted-source sign/interpolation
+assertions passed, and all 3,266 P0006 GPS GeoCSV rows matched the negative of
+the raw GPS export's `gps_time-mer_time` value at printed precision.
 
-The layer-crossing writer uses the returned position object's `.date`, rather
-than the separately calculated crossing time. Consequently, a stored crossing
-row can carry a GPS anchor time instead of the intended crossing epoch.
-The recording writer takes its timestamp from waveform Stats, so this particular
-export path does not replace a recording row's corrected start time.
+## Time and scientific meaning
 
-This is a source-inspection finding. Its incidence in existing data has not
-been established. Before implementation, decide how requested row time and
-fallback position provenance must be represented. Do not silently relabel an
-anchor as an interpolated result or alter historical row timestamps. Resolving
-this finding is a scientific behavior decision separate from terminology.
+All timestamp strings emitted by the GeoCSV writer, including `Time` and
+`#created`, use UTC with exactly six fractional digits and `Z`. Time offsets and
+corrections retain six decimal places in seconds. Displayed digits make no
+claim about clock accuracy, measurement precision, or uncertainty.
 
-## Coordinated migration and maintenance
+Recording times retain the existing clock-drift correction. GPS, pressure and
+crossing times do not acquire that recording correction. Preserve the existing
+crossing fallback: the GPS helper can retain an anchor position and its epoch
+instead of estimating unstable velocity from closely spaced fixes. This
+intentional stability behavior is accepted and documented; it is not a
+migration defect to fix.
 
-Update this note and its linked companion in the same change whenever automaid
-changes GeoCSV row construction, timestamp derivation, clock corrections,
-position interpolation, or the layer-crossing fallback. Keep the status, table,
-findings, and agreed vocabulary synchronized in both repositories. Source-code
-inspection references must identify the revision they describe.
+The mixed layer is the upper approximately 50 m in this model. Descent exits
+its base; ascent enters it. The boundary is configured, not measured from a
+temperature profile. Faster horizontal drift there is empirical, approximately
+an order of magnitude, with no imposed velocity ratio. Legacy code's deeper
+"mixed layer" means the deep layer; correction outside the allowed writer is
+deferred. See [Nolet et al. (2024), pp. 2369, 2372](https://doi.org/10.1785/0220230377).
 
-The migration must coordinate automaid, mermaid-geocsv, mermaid-publisher, and
-bathymetrix-site, including the canonical publisher contract. Compatibility
-with historical identifiers and `StartTime`, new-output versioning, fixtures,
-and acceptance evidence require an explicit migration plan. Existing source
-archives, frozen payloads, manifests, and published release bytes remain
-unchanged. This note authorizes no regeneration, publication, or deployment.
+Geographic metadata describe the station, not earthquake parameters. Retain the
+approximate `WaterPressure / 100` station-depth mapping, existing tolerances,
+and optional SAC `stla/stlo/stel/stdp` projections; never add `ev*` projections.
 
-## Source inspection
+## Missing values
 
-The current-behavior findings above were inspected in automaid commit
-`678ea8f06e445d3da1864236f29a2ebee87ee659`. They describe that source revision,
-not a newly verified corpus or a guarantee for future producer versions.
+- An empty decoded CSV field is absent; required/applicable fields follow the
+  row schema. Missing required values raise. Emit absence as an unquoted empty
+  field; quoted empty fields also decode as absent.
+- Nonempty strings such as `nan`, `NA`, `NULL` and `NaT` are literal values.
+  Nonempty invalid numbers or timestamps raise; numeric values must be finite.
+- Whitespace-only values are invalid except exactly two ASCII spaces in
+  `Location`: `6,"  ",9` means a known blank SEED location code; `6,,9` is absent.
+  The DataFrame and raw association source retain both literal spaces. Never
+  trim, normalize, or default this source value. Association can compare that
+  defined blank code with ObsPy's `""` without rewriting either identity or the
+  source cell; absent Location remains unknown and never becomes a blank code.
 
-- [GeoCSV row construction and required timestamps](../scripts/geocsv.py).
-- [Recording clock correction and station position](../scripts/events.py).
-- [Layer-crossing calculation and correction scope](../scripts/cycles.py).
-- [Position interpolation and timestamp fallback](../scripts/gps.py).
-- [Pressure-log timestamp extraction](../scripts/utils.py).
+References: [CSV field syntax](https://www.rfc-editor.org/rfc/rfc4180.html),
+[blank SEED identifiers](https://www.fdsn.org/media/message_attachments/2015/07/20/FDSN-WS-Specifications-1.1.pdf).
+Blank Location does not universally mean "primary instrument".
+
+## Scope and remaining decisions
+
+The names, schema declaration, six-digit display, missing-value policy,
+Recording-only zero Elevation and intentional fallback above are selected.
+Before code changes, complete and review the normative field dictionary,
+row-specific requirements, metadata/CSV
+grammar and representative examples. Existing columns, apart from the selected
+`Time`, `ClockOffset` and `AppliedClockCorrection` renames, are the review
+baseline, not a substitute for that specification review. No
+direction column or generic GeoCSV compatibility layer is added.
+
+Current work is definitions/documentation only: no automaid code edits,
+including writer or version edits. For a separately requested implementation,
+the earlier allowlist remains `scripts/geocsv.py` plus the version value in
+`scripts/setup.py`; that boundary is not authorization to implement now.
+Stop and discuss before any other code edit.
+
+Historical source data, published bytes, release identities and evidence remain
+unchanged. Six-digit formatting applies to new output; fetch must preserve any
+existing literal release ID and all its fractional digits. No source rewrites,
+uploads, pointer changes, deployment, commits, tags or releases are authorized.
+
+Source references: [writer](../scripts/geocsv.py),
+[position helper](../scripts/gps.py),
+[cycle calculation](../scripts/cycles.py).
+Timing and fallback behavior were inspected at automaid revisions
+`678ea8f06e445d3da1864236f29a2ebee87ee659` and
+`f0c97e98629967de8161f744e9fbbc4474030b9b`; inspect current source before implementation.

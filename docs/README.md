@@ -31,4 +31,6 @@ make automaid an Argo DAC, GDAC, or format-compliant producer.
 
 ## GeoCSV format design
 
-- [Method identifiers and row times](geocsv-method-identifiers.md): proposed terminology, current timestamp derivation, and an unresolved interpolation fallback; maintained with mermaid-geocsv.
+- [GeoCSV migration decisions](geocsv-method-identifiers.md): agreed names, timestamps, missing values and scientific constraints; maintained with mermaid-geocsv.
+- [Four-repository migration plan](geocsv-migration-plan.md): coordinated implementation, verification, instruction precedence and allowed code changes.
+- [Clock terminology cleanup TODO](clock-terminology-todo.md): source-audited wording fixes that preserve clock signs and algorithms.
