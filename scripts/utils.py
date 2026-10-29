@@ -334,6 +334,7 @@ def set_mseed_time_correction(mseed_filename, time_corr_secs):
             mseed_file.write(time_correction_binstr)
 
             # Find the offset of the next record relative to the start of the file
+            record_offset += record_info.get('record_length')
 
 
 def flattenList(toplist):
