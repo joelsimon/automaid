@@ -9,6 +9,11 @@ this document. Legacy MERMAID GeoCSV versions are unsupported: no legacy
 reader/writer path, aliases or automatic fallback. The reader supports this
 controlled MERMAID profile, not arbitrary GeoCSV dialects or schemas.
 
+The complete [schema 1.0.0 contract](../../mermaid-geocsv/docs/format-spec.md) specifies the header,
+field dictionary, domains, row matrix and complete synthetic example. It is
+the payload specification to review before implementation; this note records
+the decisions and their source evidence.
+
 The planned first header line is exactly:
 
 ```text
@@ -20,6 +25,22 @@ The reader requires the supported schema declaration and rejects missing or
 unsupported revisions clearly. Preserve it in parsed and association provenance.
 Schema versioning is independent of producer/package versions and release IDs;
 this does not authorize a software 1.0.0 release or require legacy support.
+
+## File structure
+
+Each file contains one MERMAID instrument and one CSV table. Use UTF-8 encoding,
+a comma delimiter, LF writer line endings and standard double-quote CSV
+escaping. The table has exactly these 16 columns in this fixed order:
+
+```csv
+MethodIdentifier,Time,Network,Station,Location,Channel,DataQuality,Latitude,Longitude,Elevation,WaterPressure,InstrumentDescription,SampleRate,SampleCount,ClockOffset,TimeCorrectionApplied
+```
+
+Require schema, dataset, created, delimiter, lineterminator, field_type and
+field_unit declarations exactly once before the column header. Description and
+attribution are optional descriptive text. Preserve other descriptive comments;
+reject repeated required declarations and field_missing. The complete contract
+defines the remaining syntax. There is no generic GeoCSV or multiple-table support.
 
 ## Agreed names
 
@@ -42,11 +63,19 @@ Rename `StartTime` to `Time`. `Recording` describes an original waveform segment
 including its corrected first-sample epoch, station position, sample rate and
 count. `Position` is geographic station position; `Location` remains the SEED
 location code. Rename `TimeDelay` to `ClockOffset` and `TimeCorrection` to
-`AppliedClockCorrection`, with their existing values, signs and second units
+`TimeCorrectionApplied`, with their existing values, signs and second units
 unchanged. Other column names and units remain unchanged unless separately
 specified. Absolute-pressure labeling does not introduce atmospheric correction.
 
-In the writer, **Recording rows only** emit `Elevation = 0 m`, explicitly
+`InstrumentDescription` uses `MERMAID_<model>`, for example
+`MERMAID_452.020`, replacing `MERMAIDHydrophone(452.020)`.
+Preserve the actual source model code; do not hard-code 452.020 for other
+models or supply a default when the model is absent. This describes the
+MERMAID instrument model; the MethodIdentifier source identifies the specific
+GPS sensor, pressure sensor or processing software.
+
+In the writer, **Recording rows only** emit the literal Elevation cell `0`, with
+`float` in field_type and `meters` in field_unit, explicitly
 representing the adopted sea-level reference rather than the submerged sensor's
 physical elevation. Other row kinds keep Elevation absent. The reader preserves
 both the explicit zero and absence; it never supplies a default. Association's
@@ -59,6 +88,35 @@ Repository-wide rule: never substitute defaults for missing, unknown, invalid
 or unavailable source metadata in parsing, association, projections or
 provenance. Optional values remain missing; required values raise. Preserve
 explicit source values without silent repair or filling from another record.
+
+## Row requirements
+
+`MethodIdentifier`, `Time`, `Network`, `Station` and `InstrumentDescription`
+are required on every row. R means required, O optional, and a dash means the
+cell must be empty. Required missing values and populated inapplicable fields
+raise; nothing is defaulted.
+
+| Field | Position | Pressure-Absolute | Recording | Crossing (both directions) |
+| --- | --- | --- | --- | --- |
+| `Latitude`, `Longitude` | R | — | R | R |
+| `Location`, `Channel`, `DataQuality` | — | — | R | — |
+| `Elevation` | — | — | R: zero metres | — |
+| `WaterPressure` | — | R | R for Q; O for D | R |
+| `SampleRate`, `SampleCount` | — | — | R | — |
+| `ClockOffset` | O | — | — | — |
+| `TimeCorrectionApplied` | — | — | R | — |
+
+Location is required **only on Recording rows** and must be empty on all other
+row kinds. Two literal ASCII spaces are a present, known blank code; an empty
+cell is unknown and does not satisfy the Recording requirement. The pressure
+exception uses the source row's Q/DET or D/REQ quality and preserves the
+existing rule; never borrow a missing pressure from another row.
+
+Present numbers are finite; latitude is within [-90, 90], longitude within
+[-180, 180], pressure nonnegative, sample rate positive and sample count a
+positive integer. Recording quality is Q or D. Preserve identity strings
+without new alphabet/length restrictions or rate-derived codes. Network,
+Station and InstrumentDescription each agree across all rows of a file.
 
 ## Clock definitions and source mappings
 
@@ -74,13 +132,25 @@ in seconds: positive means the instrument clock is ahead. Its current source
 is `gps.mseed_time_delay`, which is already `-gps.clockdrift`. The proposed
 `ClockDrift` column is withdrawn; no GPS-column sign reversal is selected.
 
-`AppliedClockCorrection` is `event.mseed_time_correction`, the clock correction
-already added to the uncorrected original recording start, in seconds:
+`TimeCorrectionApplied` is `event.mseed_time_correction`, the clock correction
+already added to the uncorrected original recording start, in seconds. It is a
+signed numeric amount, not the MiniSEED boolean applied flag:
 
 ```text
-Time = uncorrected_starttime + AppliedClockCorrection
-AppliedClockCorrection = -estimated_ClockOffset_at_recording_time
+Time = uncorrected_starttime + TimeCorrectionApplied
+TimeCorrectionApplied = -estimated_ClockOffset_at_recording_time
 ```
+
+Timing-field requirements:
+
+- Position rows: `ClockOffset` is optional. Unknown offset stays absent;
+  `TimeCorrectionApplied` is not applicable and remains absent.
+- Recording rows: `TimeCorrectionApplied` is required. Missing correction raises;
+  `ClockOffset` is not applicable and remains absent.
+- Pressure and crossing rows: both timing-correction fields remain absent.
+
+Do not move the GPS-fix offset into a Recording row, infer a recording correction
+from another row, or substitute zero for an absent value.
 
 Positive correction moves the recording timestamp later; negative moves it
 earlier. The correction uses the drift sign, opposite to the offset evaluated
@@ -95,11 +165,27 @@ clock processing. The source mapping was checked at automaid commit
 assertions passed, and all 3,266 P0006 GPS GeoCSV rows matched the negative of
 the raw GPS export's `gps_time-mer_time` value at printed precision.
 
+MiniSEED's existing fixed-header conversion truncates the correction toward
+zero to 0.0001-second units. Retain this behavior: in the normal write path,
+timestamps are already corrected and the applied bit prevents reapplication.
+The stored field is correction history; its quantization does not round the
+waveform timestamps or the GeoCSV value. No rounding refactor or new rounding
+boundary test work is included in the migration.
+
+The separate record-offset regression was fixed in automaid commit `c16bf70`
+by restoring advancement to the next record. Verification of the current helper
+with two synthetic seven-record files confirmed both correction signs on every
+record, with applied bits set and samples/start/end unchanged (12 assertions).
+This issue is resolved; it is not pending migration work.
+
 ## Time and scientific meaning
 
 All timestamp strings emitted by the GeoCSV writer, including `Time` and
 `#created`, use UTC with exactly six fractional digits and `Z`. Time offsets and
-corrections retain six decimal places in seconds. Displayed digits make no
+corrections retain six decimal places in seconds. Source epochs with more than
+six fractional digits round to the nearest microsecond, with exact ties to
+even and normal carry. This changes serialization only, not clock processing
+or MiniSEED header handling. Displayed digits make no
 claim about clock accuracy, measurement precision, or uncertainty.
 
 Recording times retain the existing clock-drift correction. GPS, pressure and
@@ -119,8 +205,14 @@ deferred. See [Nolet et al. (2024), pp. 2369, 2372](https://doi.org/10.1785/0220
 Geographic metadata describe the station, not earthquake parameters. Retain the
 approximate `WaterPressure / 100` station-depth mapping, existing tolerances,
 and optional SAC `stla/stlo/stel/stdp` projections; never add `ev*` projections.
+Crossing WaterPressure retains configured mixed-layer depth multiplied by 100;
+it is a boundary proxy, distinct from an absolute-pressure sensor measurement.
 
 ## Missing values
+
+Fields that do not apply to the row kind must be empty CSV cells. Unexpected
+populated inapplicable fields raise; do not ignore or silently discard them.
+This is distinct from optional applicable fields, which may be absent.
 
 - An empty decoded CSV field is absent; required/applicable fields follow the
   row schema. Missing required values raise. Emit absence as an unquoted empty
@@ -140,14 +232,12 @@ Blank Location does not universally mean "primary instrument".
 
 ## Scope and remaining decisions
 
-The names, schema declaration, six-digit display, missing-value policy,
-Recording-only zero Elevation and intentional fallback above are selected.
-Before code changes, complete and review the normative field dictionary,
-row-specific requirements, metadata/CSV
-grammar and representative examples. Existing columns, apart from the selected
-`Time`, `ClockOffset` and `AppliedClockCorrection` renames, are the review
-baseline, not a substitute for that specification review. No
-direction column or generic GeoCSV compatibility layer is added.
+The names, file/header contract, field domains, row requirements, six-digit
+rounding, missingness, literal Recording Elevation `0` and intentional fallback
+are selected. The complete specification and worked example are now recorded
+for final review in the linked contract. No naming, sign or row-applicability
+decision remains open; implementation still requires a separately requested
+task after that review. No direction column or generic compatibility layer is added.
 
 Current work is definitions/documentation only: no automaid code edits,
 including writer or version edits. For a separately requested implementation,

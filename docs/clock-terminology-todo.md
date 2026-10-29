@@ -13,8 +13,8 @@ Preserve the existing clock algorithms, signs and values. The selected
 ```text
 manual drift = GPS time - MERMAID time
 ClockOffset = MERMAID time - GPS time = gps.mseed_time_delay
-AppliedClockCorrection = event.mseed_time_correction
-corrected_start = uncorrected_start + AppliedClockCorrection
+TimeCorrectionApplied = event.mseed_time_correction
+corrected_start = uncorrected_start + TimeCorrectionApplied
 ```
 
 The GPS-fix offset and recording correction refer to different epochs. At the
@@ -57,6 +57,9 @@ explicitly state an addition equation; the addition rule was verified against
 ObsPy/libmseed source and positive/negative synthetic records with both flag
 states. Do not attribute an unstated equation to the manual.
 
-The separate missing-record-offset defect and signed five-second guard are
-behavioral inspection items, not terminology-only changes. No code, comments,
-source data or existing waveform outputs were modified by this audit.
+The separate missing-record-offset defect was fixed in automaid commit
+`c16bf70`; current-helper synthetic checks confirm correction metadata on every
+record. The signed five-second guard remains an inspection item. Existing
+MiniSEED correction truncation is accepted; no rounding change is planned.
+These are separate from the terminology checklist. The audits changed no code,
+source data or existing waveform outputs.

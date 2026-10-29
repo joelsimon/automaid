@@ -60,37 +60,59 @@ Location is preserved. Do not silently repair input or fill from another record.
   Replace the active historical-consumer requirement with the new consumer
   requirement. Older AGENTS baseline clauses are superseded for this migration;
   archived evidence is retained as history, not as a compatibility obligation.
-- Write one normative payload specification in
-  `mermaid-geocsv/docs/format-spec.md`, referenced by the producer, reader,
-  publisher contract and site. Keep payload semantics distinct from the
-  publisher-owned manifest/download protocol.
-- Specify the exact header/order, types, units, per-row required/applicable
+- Review the selected normative [payload specification](../../mermaid-geocsv/docs/format-spec.md),
+  now written and referenced by the producer, reader, publisher contract and
+  site. It includes the complete field dictionary, row matrix, exact header and
+  synthetic example. Keep payload semantics distinct from the publisher-owned
+  manifest/download protocol; review the complete artifact before code changes.
+- Apply the selected file structure: one MERMAID instrument and one CSV table
+  per file, the fixed 16-column order in the paired decisions, UTF-8 encoding,
+  comma delimiter, LF writer line endings and standard double-quote CSV escaping.
+  Specify exact metadata/header rules, types, units, per-row required/applicable
   fields, five method/source identifiers, missingness and six-digit timestamps.
   Document timing provenance, already-applied correction signs, the intentional
   crossing fallback, coordinate/vertical conventions, absolute pressure and the
-  approximate station-depth projection. Require explicit `Elevation = 0 m`
-  only on Recording rows, denoting the adopted sea-level reference, with
-  Elevation absent on other row kinds. Reader parsing preserves source values
-  and missingness and performs no scientific inference or default filling.
+  approximate station-depth projection. Require Recording-only Elevation as the
+  literal numeric cell `0`, type `float` and unit `meters`, denoting the adopted
+  sea-level reference. Never emit `0 m`
+  as a cell value. Elevation is absent on other row kinds. Reader parsing
+  preserves source values and missingness and performs no scientific inference or default filling.
+- Require empty cells for fields inapplicable to a row kind; populated
+  inapplicable fields raise. Optional applicable fields may be empty, without
+  defaults. Location is required only on Recording rows and must be empty
+  on Position, Pressure and Crossing rows. The selected row matrix is recorded
+  in the paired format decisions; no Location applicability decision remains open.
+- Emit `InstrumentDescription` as `MERMAID_<model>`, preserving the
+  actual source model code (for example `MERMAID_452.020`). This is
+  an explicit string-format change, not a default model or hardware change.
 - Require exactly one schema declaration, planned as the first line:
   `# MERMAID GeoCSV schema: 1.0.0` (no trailing period). Keep the existing GeoCSV
   metadata declaration. The schema revision is independent of software versions;
   it does not authorize package 1.0.0 or imply support for any earlier revision.
 - Selected column renames are `StartTime` to `Time`, `TimeDelay` to
-  `ClockOffset`, and `TimeCorrection` to `AppliedClockCorrection`. The clock
+  `ClockOffset`, and `TimeCorrection` to `TimeCorrectionApplied`. The clock
   columns preserve their existing values and signs. `ClockOffset` is instrument
   minus GPS time (`gps.mseed_time_delay`); the already-applied correction remains
   `event.mseed_time_correction`. Never swap those source variables or negate
   either export during the rename. Reserve drift for GPS minus instrument time.
+  `ClockOffset` is optional on Position rows; unknown remains absent.
+  `TimeCorrectionApplied` is required on Recording rows; missing raises.
+  Each is absent on other row kinds: do not move the measured GPS offset into
+  Recording rows, infer a correction from another row, or fill with zero.
   Review every other existing column rather than
   automatically treating the current layout as a finished decade-long contract.
   Do not add a direction column or change scientific algorithms. Apart from
   the agreed explicit Recording Elevation, preserve scientific values. Discuss
   any additional column/name/meaning change before freezing it.
-- Specify encoding, delimiter, quoting, line endings, header/comment rules,
-  exact type/domain validation and unsupported-version errors. Include a complete
-  new-format example. Reject missing/unsupported schema declarations clearly;
-  do not infer a legacy schema or accept unrelated GeoCSV profiles.
+- Apply the selected header contract: required schema, dataset, created,
+  delimiter, lineterminator, field_type and field_unit each occur once before
+  the column header. Description/attribution are optional; other descriptive
+  comments remain opaque source evidence. Reject repeated required declarations
+  and field_missing. Follow the specification's types, units, field domains,
+  CSV grammar and acceptance/rejection cases without defaults or legacy inference.
+- Serialize sub-microsecond source epochs by rounding to the nearest microsecond,
+  with exact ties to even and normal carry. This is GeoCSV formatting only;
+  preserve clock algorithms and accepted MiniSEED fixed-header truncation.
 - **Design gate:** review the complete specification and examples before making
   functional changes. The compact decision note fixes selected decisions; it is
   not the full normative specification. Record genuine remaining ambiguities
@@ -110,18 +132,34 @@ The current `mermaid-geocsv/docs/reader-spec.md`, `docs/obspy-association.md`,
 pre-migration behavior. Replace their conflicting timestamp, missingness and
 hard-coded elevation rules with the implementation; do not use those older
 rules to override the selected target or claim migration is already complete.
-The publisher AGENTS and canonical contract still describe active historical
-consumer support; update that policy explicitly for the new-only schema.
+The publisher AGENTS now makes the replacement's new-only policy explicit,
+and its contract and the site link to the selected payload specification as
+planned behavior. Current publisher code still contains historical consumer
+paths; remove those active paths during implementation while retaining evidence.
+The older implementation descriptions do not override the new payload contract.
+
+### Clock audit dispositions
+
+Retain existing MiniSEED fixed-header truncation to 0.0001-second units. In the
+normal already-corrected write path this records the applied amount; do not add
+a rounding refactor or rounding-boundary test work to this migration.
+
+The all-record correction-value bug is resolved by automaid commit `c16bf70`,
+which restored record-offset advancement. Current-helper checks passed for
+positive and negative corrections across seven records each, with samples and
+timestamps unchanged. Do not list it as unresolved or make further utility
+changes under the GeoCSV migration's writer-only allowlist.
 
 ## 2. Update the allowed producer and consumer together
 
 - In a separately authorized implementation, `automaid/scripts/geocsv.py`
   emits the five agreed identifiers, `Time`, `ClockOffset` and
-  `AppliedClockCorrection`. Preserve the existing clock source variables,
+  `TimeCorrectionApplied`. Preserve the existing clock source variables,
   signs and all correction algorithms. Also emit
-  six-digit UTC timestamps (including `#created`), true empty missing cells and
-  two-space known blank Location. Emit `Elevation = 0 m` on Recording rows
-  only; keep it absent elsewhere. Preserve source sensor/version provenance,
+  six-digit UTC timestamps (including `#created`) with the selected rounding,
+  true empty missing cells and two-space known blank Location. Emit the literal
+  Elevation cell `0` on Recording rows, with `float` type and `meters` unit;
+  keep it absent elsewhere. Preserve source sensor/version provenance,
   other scientific values, row ordering, deduplication, pressure mapping and the
   intentional position/time fallback. Document corrected layer terminology in
   this file without refactoring off-limits GPS/cycle code.
@@ -172,9 +210,10 @@ consumer support; update that policy explicitly for the new-only schema.
 
 ## 4. Verify the integrated replacement locally
 
-- Exercise all five identifiers; exact timestamp width, UTC and chronology;
-  unchanged fallback semantics; numeric corrections; literal string `nan`;
-  numeric rejection; missing required fields; and known blank versus unknown
+- Exercise the complete specification example and its acceptance/rejection
+  cases: all five identifiers; exact timestamp width, UTC, ties-to-even rounding
+  and second/date carry; unchanged fallback semantics; numeric corrections;
+  literal string `nan`; numeric rejection; missing required fields; and known blank versus unknown
   Location through parsing and waveform association.
 - Compare scientific values before/after migration, allowing only explicitly
   agreed representation changes. Higher displayed timestamp precision is a
@@ -221,12 +260,13 @@ consumer support; update that policy explicitly for the new-only schema.
 
 ## Design status and remaining work
 
-The five method names, `Time`, `ClockOffset`, `AppliedClockCorrection`,
-six-digit display, missing-value rules, explicit schema
-declaration, Recording-only zero Elevation and intentional fallback are
-selected. They are not a complete format specification. Phase 1 must finish and review every field/row rule,
-file/header grammar and examples before implementation. Exact software version
-increments can be chosen during migration within the rules above; schema
+The complete [schema contract](../../mermaid-geocsv/docs/format-spec.md) is
+written with the selected names, clock signs, file/header grammar, field
+requirements/domains, missingness, literal Recording Elevation `0`, six-digit
+timestamp rounding, intentional fallback and complete synthetic example.
+No naming, sign, row-applicability or required-header decision remains open.
+Review the complete artifact before the separately requested implementation.
+Exact software version increments can be chosen during migration; schema
 `1.0.0` is a separate specification identifier. Any additional scientific/schema
 decision, or automaid code edit outside the allowlist, requires discussion.
 Do not describe the replacement as ready until design review and the integrated
