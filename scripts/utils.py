@@ -277,7 +277,9 @@ def set_mseed_time_correction(mseed_filename, time_corr_secs):
             nearest 0.0001-second tick with exact decimal ties to even.
 
     Result:
-        modifies miniSEED file (see warnings and notes)
+        modifies miniSEED file (see warnings and notes). After writing, checks
+        every record's applied flag and integer correction value; raises
+        ValueError with the record number and byte offset on a mismatch.
 
     Verifications:
     [1] Verify the 'Timing correction applied' FLAG has been set for N records:
@@ -345,6 +347,21 @@ def set_mseed_time_correction(mseed_filename, time_corr_secs):
 
             # Find the offset of the next record relative to the start of the file
             record_offset += record_info.get('record_length')
+
+    # Read back independently of the writing loop so a skipped record is caught.
+    record_offset = 0
+    for record_number in range(number_of_records):
+        record_info = obspy_util.get_record_information(mseed_filename,
+                                                       offset=record_offset)
+        if (not record_info['activity_flags'] & 2 or
+                record_info['time_correction'] != time_corr_one_ten_thous):
+            raise ValueError(
+                f"MiniSEED time correction verification failed for {mseed_filename}, "
+                f"record {record_number + 1} at byte offset {record_offset}: "
+                f"expected applied bit set and correction {time_corr_one_ten_thous} "
+                f"ticks, got activity flags {record_info['activity_flags']} "
+                f"and correction {record_info['time_correction']} ticks")
+        record_offset += record_info['record_length']
 
 
 def flattenList(toplist):

@@ -104,3 +104,27 @@ helper. These are separate from rounding and remain unresolved:
 No flag-setting, record-count or record-offset algorithms were changed in this
 follow-up. Support for other header byte orders or mixed record lengths requires
 a separately scoped change.
+
+## MiniSEED correction read-back validation
+
+Automaid v4.6.2 adds a separate read-back pass after the correction writer closes
+the file. Every record must have the correction-applied activity bit set and its
+stored signed integer correction must equal the expected rounded 0.0001-second
+tick count, including when that count is zero. A mismatch raises `ValueError`
+with the filename, one-based record number, byte offset, expected tick count and
+observed flags and tick count. The check independently advances through records
+so a missing increment in the writing loop is detected on a subsequent record
+whose correction was not written. An exception leaves the modified file in
+place; validation does not roll back writes.
+
+Correction rounding, clock modeling, waveform timestamps and GeoCSV output are
+unchanged. The existing uniform-record-length and big-endian limitations above
+still apply.
+
+Verification used conda `pymaid3.10` and temporary synthetic 256-byte big-endian
+records: eight valid correction cases passed 320 raw per-record header checks,
+including zero, both signs, decimal ties and signed-32-bit endpoints. Samples,
+sample rates and start/end times were preserved. In-memory mutations reproduced
+the missing writer increment and an incorrect numeric write; both raised at the
+first mismatching record. Suppressing flag writes also raised for a zero
+correction. No processed products were modified.
