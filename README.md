@@ -115,3 +115,16 @@ Zenodo, https://doi.org/10.5281/zenodo.5057096.
 <sup>1</sup>One-liner of conda install including all packages suggested by
 Dalija Namjesnik after she and Joel Simon struggled with an install in May 2023;
 similar to note 2 below, this should also probably be validated...
+
+## Local GeoCSV schema migration
+
+The writer in `scripts/geocsv.py` emits [schema 1.0.0](../mermaid-geocsv/docs/format-spec.md)
+with producer version v4.6.0. This is local source implementation, not a software
+release or data publication. It uses five method identifiers, fixed 16 columns,
+six-digit UTC epochs, empty missing cells and explicit zero Recording Elevation.
+Signed pressure-sensor readings preserve gauge error; Recording pressure and
+crossing proxies remain nonnegative. Clock signs, already-applied correction,
+scientific values, deduplication and the intentional crossing fallback are unchanged.
+Existing protected outputs remain old-format. Isolated verification calls only
+`GeoCSV(saved_cycles).write(explicit_temporary_path)`, never the processing entry
+point or mirror rebuild. See [the migration plan](docs/geocsv-migration-plan.md).

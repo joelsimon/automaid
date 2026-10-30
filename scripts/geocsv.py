@@ -18,8 +18,12 @@
 
 import csv
 import hashlib
+import io
+import re
 import pytz
 import datetime
+from decimal import Decimal, ROUND_HALF_EVEN
+from obspy import UTCDateTime
 import numpy as np
 
 import cycles
@@ -27,13 +31,36 @@ import setup
 import utils
 from collections import Counter
 
+
+def _format_utc(value):
+    """Serialize an epoch to six UTC digits, rounding exact ties to even."""
+    if isinstance(value, str):
+        # The caller may supply an epoch with coarser or finer precision.
+        # This formats a new file identity; it never rewrites an existing file.
+        match = re.fullmatch(r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]+))?Z", value)
+        if match is None:
+            raise ValueError("GeoCSV source timestamp requires explicit UTC Z")
+        base = datetime.datetime.strptime(match[1], "%Y-%m-%dT%H:%M:%S")
+        fraction = Decimal('0.' + match[2]) if match[2] else Decimal(0)
+        micros = int((fraction * 1_000_000).to_integral_value(rounding=ROUND_HALF_EVEN))
+        return (base + datetime.timedelta(microseconds=micros)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("GeoCSV timestamp requires an explicit timezone")
+        value = UTCDateTime(value)
+    if not isinstance(value, UTCDateTime):
+        raise TypeError("GeoCSV timestamp requires UTCDateTime or aware datetime")
+    microseconds = int((Decimal(value.ns) / 1000).to_integral_value(rounding=ROUND_HALF_EVEN))
+    seconds, fraction = divmod(microseconds, 1_000_000)
+    return UTCDateTime(seconds).strftime("%Y-%m-%dT%H:%M:%S") + f".{fraction:06d}Z"
+
 class GeoCSV:
     """Organize MERMAID metadata and write them to GeoCSV format
 
     Args:
         cycles (list): List of cycles.Cycle instances
-        creation_datestr (str): File-creation datestr as "YYYY-MM-DDTHH:MM:SS.sssZ"
-        mixed_layer_depth_m (float): Depth to thermocline in meters positive down (def: np.float64('nan'))
+        creation_datestr (str): File-creation datestr as "YYYY-MM-DDTHH:MM:SS.ffffffZ"
+        mixed_layer_depth_m (float): Configured upper mixed-layer depth in meters positive down (def: np.float64('nan'))
         delimiter (str): GeoCSV delimiter (def: ',')
         lineterminator (str): GeoCSV line terminator (def: '\n')
 
@@ -41,7 +68,7 @@ class GeoCSV:
 
     def __init__(self,
                  cycle_list,
-                 creation_datestr = datetime.datetime.now(pytz.UTC).isoformat()[:23] + "Z",
+                 creation_datestr = None,
                  mixed_layer_depth_m = np.float64('nan'),
                  delimiter=',',
                  lineterminator='\n'):
@@ -50,12 +77,16 @@ class GeoCSV:
             raise ValueError('Input `cycle_list` must be list of `cycles.Cycle` instances')
 
         self.cycles = cycle_list
-        self.creation_datestr = creation_datestr
+        self.creation_datestr = _format_utc(
+            datetime.datetime.now(pytz.UTC) if creation_datestr is None else creation_datestr)
         self.mixed_layer_depth_m = mixed_layer_depth_m
+        if delimiter != ',' or lineterminator != '\n':
+            raise ValueError("MERMAID GeoCSV requires comma delimiters and LF endings")
         self.delimiter = delimiter
         self.lineterminator = lineterminator
 
         # Comments (multiple, some keywords required, start with # or "#)
+        self.schema_comment = ['# MERMAID GeoCSV schema: 1.0.0']
         self.dataset_comment = ['#dataset: GeoCSV']
         self.created_comment = ['#created: ' + self.creation_datestr]
         self.description_comment = ['#description: Metadata for drifting Mobile Earthquake Recording in Marine Areas by Independent Divers (MERMAID) hydrophones, www.EarthScopeOceans.org']
@@ -110,7 +141,7 @@ class GeoCSV:
         # Header line (single, first uncommented line after some comment(s))
         self.header = [
             'MethodIdentifier',
-            'StartTime',
+            'Time',
             'Network',
             'Station',
             'Location',
@@ -123,17 +154,19 @@ class GeoCSV:
             'InstrumentDescription',
             'SampleRate',
             'SampleCount',
-            'TimeDelay',
-            'TimeCorrection'
+            'ClockOffset',
+            'TimeCorrectionApplied'
         ]
 
-        self.MethodIdentifier_GPS = 'Measurement:GPS:{:s}'.format(utils.get_gps_sensor_name().replace(' ', '_'))
-        self.MethodIdentifier_Pressure = 'Measurement:Pressure:{:s}'.format(utils.get_absolute_pressure_sensor_name().replace(' ', '_'))
-        self.MethodIdentifier_Algorithm_Event = 'Algorithm(event):automaid:{:s}'.format(setup.get_version())
-        self.MethodIdentifier_Algorithm_Thermocline = 'Algorithm(thermocline):automaid:{:s}'.format(setup.get_version())
+        self.MethodIdentifier_GPS = 'Measurement:Position:{:s}'.format(utils.get_gps_sensor_name().replace(' ', '_'))
+        self.MethodIdentifier_Pressure = 'Measurement:Pressure-Absolute:{:s}'.format(utils.get_absolute_pressure_sensor_name().replace(' ', '_'))
+        self.MethodIdentifier_Algorithm_Event = 'Derivation:Recording:automaid-{:s}'.format(setup.get_version())
+        self.MethodIdentifier_Crossing_Descent = 'Interpolation:Crossing-Descent:automaid-{:s}'.format(setup.get_version())
+        self.MethodIdentifier_Crossing_Ascent = 'Interpolation:Crossing-Ascent:automaid-{:s}'.format(setup.get_version())
 
     def get_comment_lines(self):
         comment_lines = [
+            self.schema_comment,
             self.dataset_comment,
             self.created_comment,
             self.description_comment,
@@ -168,11 +201,27 @@ class GeoCSV:
                     f"GeoCSV requires float or numpy.float64; got {type(value).__name__}: {value!r}")
             return value
 
-        # Check floating-point inputs before conversion; integers and pressure strings are valid.
-        d0 = lambda x: format(np.float64(check_float64(x)), '.0f')
-        d1 = lambda x: format(np.float64(check_float64(x)), '.1f')
-        d6 = lambda x: format(np.float64(check_float64(x)), '.6f')
-        nan = np.float64('nan')
+        def number(value, digits, *, optional=False):
+            # Internal absent numeric observations are NaN/None, never the
+            # nonempty string "nan". Required observations must be present.
+            check_float64(value)
+            if value is None or (isinstance(value, (float, np.float64)) and np.isnan(value)):
+                if optional:
+                    return ''
+                raise ValueError("Missing required GeoCSV numeric source value")
+            numeric = np.float64(value)
+            if not np.isfinite(numeric):
+                raise ValueError(f"Invalid GeoCSV numeric source value: {value!r}")
+            return format(numeric, f'.{digits}f')
+
+        d0 = lambda x: number(x, 0)
+        d6 = lambda x: number(x, 6)
+        absent = ''
+
+        def instrument(cycle):
+            if not isinstance(cycle.kinst, str) or not cycle.kinst.strip():
+                raise ValueError("Missing required MERMAID model")
+            return f'MERMAID_{cycle.kinst}'
         check_float64(self.mixed_layer_depth_m)
 
         def format_gps_rows(cycle):
@@ -190,21 +239,21 @@ class GeoCSV:
             for gps in sorted(cycle.gps_list, key=lambda x: x.date):
                 gps_rows.append([
                     self.MethodIdentifier_GPS,
-                    str(gps.date)[:23]+'Z',
+                    _format_utc(gps.date),
                     cycle.network,
                     cycle.kstnm,
-                    nan,
-                    nan,
-                    nan,
+                    absent,
+                    absent,
+                    absent,
                     d6(gps.latitude),
                     d6(gps.longitude),
-                    nan,
-                    nan,
-                    'MERMAIDHydrophone({:s})'.format(cycle.kinst),
-                    nan,
-                    nan,
-                    d6(gps.mseed_time_delay),
-                    nan
+                    absent,
+                    absent,
+                    instrument(cycle),
+                    absent,
+                    absent,
+                    number(gps.mseed_time_delay, 6, optional=True),
+                    absent
                 ])
 
             return gps_rows
@@ -227,21 +276,21 @@ class GeoCSV:
             for pressure in sorted(cycle.pressure_mbar, key=lambda x:x[1]):
                 pressure_row = [
                     self.MethodIdentifier_Pressure,
-                    str(pressure[1])[:23]+'Z',
+                    _format_utc(pressure[1]),
                     cycle.network,
                     cycle.kstnm,
-                    nan,
-                    nan,
-                    nan,
-                    nan,
-                    nan,
-                    nan,
+                    absent,
+                    absent,
+                    absent,
+                    absent,
+                    absent,
+                    absent,
                     d0(pressure[0]),
-                    'MERMAIDHydrophone({:s})'.format(cycle.kinst),
-                    nan,
-                    nan,
-                    nan,
-                    nan
+                    instrument(cycle),
+                    absent,
+                    absent,
+                    absent,
+                    absent
                 ]
 
                 if pressure_row != prev_pressure_row:
@@ -273,20 +322,21 @@ class GeoCSV:
 
                 algorithm_row = [
                     self.MethodIdentifier_Algorithm_Event,
-                    str(event.obspy_trace_stats["starttime"])[:23]+'Z',
+                    _format_utc(event.obspy_trace_stats["starttime"]),
                     cycle.network,
                     cycle.kstnm,
-                    event.obspy_trace_stats["location"],
+                    ('  ' if event.obspy_trace_stats["location"] == ''
+                     else event.obspy_trace_stats["location"]),
                     event.obspy_trace_stats["channel"],
                     event.obspy_trace_stats.mseed["dataquality"],
                     d6(event.obspy_trace_stats.sac["stla"]),
                     d6(event.obspy_trace_stats.sac["stlo"]),
-                    nan,
-                    d0(event.pressure_mbar),
-                    'MERMAIDHydrophone({:s})'.format(cycle.kinst),
+                    '0',
+                    number(event.pressure_mbar, 0, optional=event.is_requested),
+                    instrument(cycle),
                     d6(event.obspy_trace_stats["sampling_rate"]),
                     event.obspy_trace_stats["npts"],
-                    nan,
+                    absent,
                     d6(event.mseed_time_correction)
                 ]
 
@@ -300,7 +350,7 @@ class GeoCSV:
                     if event.pressure_dbar * 100 != event.pressure_mbar:
                         raise ValueError("Expected 100 mbar to equal 1 dbar")
 
-                    if event.pressure_dbar is not event.obspy_trace_stats.sac["stdp"]:
+                    if event.pressure_dbar != event.obspy_trace_stats.sac["stdp"]:
                         raise ValueError("`stdp` (roughly meters) should be the dbar pressure from .MER")
 
                     det_algo_records.append((algorithm_row, event))
@@ -373,24 +423,56 @@ class GeoCSV:
 
             required_fields = [
                 'MethodIdentifier',
-                'StartTime',
+                'Time',
                 'Network',
                 'Station',
                 'InstrumentDescription',
             ]
-            required_indices = [self.header.index(field) for field in required_fields]
             for row_number, row in enumerate(rows, start=1):
-                for field, index in zip(required_fields, required_indices):
-                    value = row[index]
-                    normalized_value = '' if value is None else str(value).strip()
-                    if not normalized_value or normalized_value.lower() == 'nan':
-                        raise ValueError(
-                            "GeoCSV required field '{}' is empty in data row {}: {}".format(
-                                field, row_number,
-                                self.delimiter.join(str(item) for item in row)))
+                source = dict(zip(self.header, row))
+                required = list(required_fields)
+                subject = source['MethodIdentifier'].split(':')[1]
+                if subject == 'Position':
+                    required += ['Latitude', 'Longitude']
+                elif subject == 'Pressure-Absolute':
+                    required += ['WaterPressure']
+                elif subject == 'Recording':
+                    required += ['Location', 'Channel', 'DataQuality', 'Latitude', 'Longitude',
+                                 'Elevation', 'SampleRate', 'SampleCount', 'TimeCorrectionApplied']
+                    if source['DataQuality'] not in {'Q', 'D'}:
+                        raise ValueError('Recording DataQuality must be Q or D')
+                    if source['DataQuality'] == 'Q':
+                        required += ['WaterPressure']
+                    count = source['SampleCount']
+                    if not isinstance(count, (int, np.integer)) or not 1 <= count < 2**63:
+                        raise ValueError('Recording SampleCount must be a positive Int64')
+                    if float(source['SampleRate']) <= 0:
+                        raise ValueError('Recording SampleRate must be positive')
+                else:
+                    required += ['Latitude', 'Longitude', 'WaterPressure']
+                for field in required:
+                    value = source[field]
+                    if (value is None or value == '' or
+                            (isinstance(value, str) and not value.strip()
+                             and not (field == 'Location' and value == '  '))):
+                        raise ValueError(f"GeoCSV required field {field!r} is empty in data row {row_number}")
+                for field in ['Network', 'Station', 'InstrumentDescription']:
+                    if not isinstance(source[field], str):
+                        raise ValueError(f'GeoCSV {field} requires a source string')
+                for field, low, high in [('Latitude', -90, 90), ('Longitude', -180, 180)]:
+                    if source[field] != '' and not low <= float(source[field]) <= high:
+                        raise ValueError(f'GeoCSV {field} is out of range')
+                if (subject != 'Pressure-Absolute' and source['WaterPressure'] != ''
+                        and float(source['WaterPressure']) < 0):
+                    raise ValueError('GeoCSV WaterPressure must be nonnegative')
+            for field in ['Network', 'Station', 'InstrumentDescription']:
+                if len({row[self.header.index(field)] for row in rows}) > 1:
+                    raise ValueError(f'GeoCSV requires one {field} per file')
 
         def format_algo_thermo_rows(cycle):
-            """Format GeoCSV rows of interpolated dates and lat/lons of des(as)cending into(out of) the thermocline
+            """Format descent/ascent crossings of the configured upper mixed-layer base.
+
+            Preserve the GPS helper's intentional anchor position/time fallback.
 
             Passage into/out of thermocline == 'Algorithm' (interpolated)
 
@@ -402,27 +484,28 @@ class GeoCSV:
             thermo_algo_rows = []
             descent = cycle.descent_leave_surface_layer_loc
             ascent =  cycle.ascent_reach_surface_layer_loc
-            for thermo in [descent, ascent]:
+            for thermo, identifier in [(descent, self.MethodIdentifier_Crossing_Descent),
+                                       (ascent, self.MethodIdentifier_Crossing_Ascent)]:
                 if thermo is None:
                     continue
 
                 thermo_algo_rows.append([
-                    self.MethodIdentifier_Algorithm_Thermocline,
-                    str(thermo.date)[:23]+'Z',
+                    identifier,
+                    _format_utc(thermo.date),
                     cycle.network,
                     cycle.kstnm,
-                    nan,
-                    nan,
-                    nan,
+                    absent,
+                    absent,
+                    absent,
                     d6(thermo.latitude),
                     d6(thermo.longitude),
-                    nan,
-                    self.mixed_layer_depth_m * 100,
-                    'MERMAIDHydrophone({:s})'.format(cycle.kinst),
-                    nan,
-                    nan,
-                    nan,
-                    nan
+                    absent,
+                    d0(self.mixed_layer_depth_m * 100),
+                    instrument(cycle),
+                    absent,
+                    absent,
+                    absent,
+                    absent
                 ])
 
             return thermo_algo_rows
@@ -487,9 +570,9 @@ class GeoCSV:
         # Open as as 'wb' in Python 2 rather than 'w' with newline='' in Python 3
         # https://docs.python.org/2/library/csv.html#csv.writer
         basename = filename.strip('.csv') if filename.endswith('.csv') else filename
-        with open(basename+'_DET_REQ.csv', 'w', newline='') as csvfile_det_req, \
-             open(basename+'_DET.csv', 'w', newline='') as csvfile_det, \
-             open(basename+'_REQ.csv', 'w', newline='') as csvfile_req:
+        with open(basename+'_DET_REQ.csv', 'w', encoding='utf-8', newline='') as csvfile_det_req, \
+             open(basename+'_DET.csv', 'w', encoding='utf-8', newline='') as csvfile_det, \
+             open(basename+'_REQ.csv', 'w', encoding='utf-8', newline='') as csvfile_req:
 
             # Define writer object for all three files
             # https://stackoverflow.com/questions/3191528/csv-in-python-adding-an-extra-carriage-return-on-windows
@@ -506,9 +589,19 @@ class GeoCSV:
                 csvwriter.writerow(self.header)
 
             # Write the combined "Measurement" and "Algorithm" rows to all three files
-            csvwriter_det.writerows(geocsv_det_rows)
-            csvwriter_req.writerows(geocsv_req_rows)
-            csvwriter_det_req.writerows(geocsv_det_req_rows)
+            for csvfile, rows in [(csvfile_det, geocsv_det_rows),
+                                  (csvfile_req, geocsv_req_rows),
+                                  (csvfile_det_req, geocsv_det_req_rows)]:
+                for row in rows:
+                    # Keep standard CSV escaping and make the defined blank
+                    # Location visible as the canonical quoted two-space cell.
+                    cells = []
+                    for field, value in zip(self.header, row):
+                        cell = io.StringIO(newline='')
+                        csv.writer(cell, lineterminator=self.lineterminator).writerow([value])
+                        encoded = '' if value == '' else cell.getvalue()[:-len(self.lineterminator)]
+                        cells.append('"  "' if field == 'Location' and value == '  ' else encoded)
+                    csvfile.write(self.delimiter.join(cells) + self.lineterminator)
 
         print("Wrote: {}".format(csvfile_det.name))
         print("Wrote: {}".format(csvfile_req.name))

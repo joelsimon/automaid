@@ -2,8 +2,9 @@
 
 # GeoCSV migration plan
 
-Status: implementation handoff, 2026-10-29; no source changes are implemented
-by this planning task. Publication, deployment, source-archive modification,
+Status: local implementation in progress, 2026-10-29, under the separately
+authorized migration task. Automaid v4.6.0, consumer 0.27.0 and publisher 0.4.0
+are local source versions, not released/deployed versions. Publication, deployment, source-archive modification,
 commits, tags and releases require separate authorization. The accepted
 [format decisions](geocsv-method-identifiers.md) and their
 [consumer companion](../../mermaid-geocsv/docs/geocsv-method-identifiers.md)
@@ -13,10 +14,12 @@ active legacy compatibility test matrix is retained. `mermaid-geocsv` supports
 only the controlled MERMAID GeoCSV profile; a generic GeoCSV reader is outside
 scope. This is a complete format-specification review, not only a label rename.
 
-The current definition-review task permits documentation changes only.
-Do not edit any automaid code, including the writer or version. The later
-implementation steps and allowlist below require a separately requested
-implementation task; they do not authorize code changes in this discussion.
+The prior design discussion was documentation-only. The separately requested
+implementation now authorizes the writer/version allowlist below and focused
+consumer/publisher/site changes. Fresh local dependency reinstalls are explicitly
+authorized. Protected products, mirrors and historical archives remain read-only.
+Finite signed Pressure-Absolute gauge readings are preserved; Recording pressure
+and crossing proxies remain nonnegative. No scientific matching tolerance changes.
 
 ## Coordination and instruction precedence
 
@@ -127,15 +130,14 @@ The consumer AGENTS now states the selected target rather than requiring old
 `StartTime`, empty-known-Location, built-in `nan` missingness or an active 0.24.0
 baseline. Keep this instruction audit part of specification review.
 
-The current `mermaid-geocsv/docs/reader-spec.md`, `docs/obspy-association.md`,
-`docs/sac.md`, public docstrings and tutorial pairs still describe implemented
-pre-migration behavior. Replace their conflicting timestamp, missingness and
+The preceding implementation references in `mermaid-geocsv/docs/reader-spec.md`, `docs/obspy-association.md`,
+`docs/sac.md`, public docstrings and tutorial pairs described pre-migration behavior and are updated with this implementation. Replace their conflicting timestamp, missingness and
 hard-coded elevation rules with the implementation; do not use those older
 rules to override the selected target or claim migration is already complete.
 The publisher AGENTS now makes the replacement's new-only policy explicit,
 and its contract and the site link to the selected payload specification as
-planned behavior. Current publisher code still contains historical consumer
-paths; remove those active paths during implementation while retaining evidence.
+planned behavior. Publisher 0.4.0 removes active historical-consumer and encoded-path fallbacks
+while retaining frozen evidence; report schema 4 uses `recording_records`.
 The older implementation descriptions do not override the new payload contract.
 
 ### Clock audit dispositions

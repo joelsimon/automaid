@@ -4,8 +4,8 @@
 
 Paired design note: [mermaid-geocsv](../../mermaid-geocsv/docs/geocsv-method-identifiers.md). Keep both notes synchronized. Execution plan: [four-repository migration](geocsv-migration-plan.md).
 
-Status: planned replacement format, recorded 2026-10-29; not implemented by
-this document. Legacy MERMAID GeoCSV versions are unsupported: no legacy
+Status: schema 1.0.0 implemented locally on 2026-10-29 by automaid v4.6.0
+and mermaid-geocsv 0.27.0; software release and compatible hosted data remain separate. Legacy MERMAID GeoCSV versions are unsupported: no legacy
 reader/writer path, aliases or automatic fallback. The reader supports this
 controlled MERMAID profile, not arbitrary GeoCSV dialects or schemas.
 
@@ -14,7 +14,7 @@ field dictionary, domains, row matrix and complete synthetic example. It is
 the payload specification to review before implementation; this note records
 the decisions and their source evidence.
 
-The planned first header line is exactly:
+The required first header line is exactly:
 
 ```text
 # MERMAID GeoCSV schema: 1.0.0
@@ -112,8 +112,10 @@ cell is unknown and does not satisfy the Recording requirement. The pressure
 exception uses the source row's Q/DET or D/REQ quality and preserves the
 existing rule; never borrow a missing pressure from another row.
 
+Pressure-Absolute sensor measurements accept finite signed readings, including
+negative gauge error, without clamping, replacement or offset correction.
 Present numbers are finite; latitude is within [-90, 90], longitude within
-[-180, 180], pressure nonnegative, sample rate positive and sample count a
+[-180, 180], Recording/crossing pressure nonnegative, sample rate positive and sample count a
 positive integer. Recording quality is Q or D. Preserve identity strings
 without new alphabet/length restrictions or rate-derived codes. Network,
 Station and InstrumentDescription each agree across all rows of a file.
@@ -236,19 +238,19 @@ The names, file/header contract, field domains, row requirements, six-digit
 rounding, missingness, literal Recording Elevation `0` and intentional fallback
 are selected. The complete specification and worked example are now recorded
 for final review in the linked contract. No naming, sign or row-applicability
-decision remains open; implementation still requires a separately requested
-task after that review. No direction column or generic compatibility layer is added.
+decision remains open; the separately requested local implementation follows that contract. No direction column or generic compatibility layer is added.
 
-Current work is definitions/documentation only: no automaid code edits,
-including writer or version edits. For a separately requested implementation,
-the earlier allowlist remains `scripts/geocsv.py` plus the version value in
-`scripts/setup.py`; that boundary is not authorization to implement now.
-Stop and discuss before any other code edit.
+The separately authorized local implementation is limited in automaid to
+`scripts/geocsv.py` plus the version returned by `scripts/setup.py`. Other
+producer algorithms, callers, utilities and configuration remain unchanged.
+The existing writer pressure sanity assertion now uses exact numeric equality
+rather than object identity, allowing saved cycles to be verified without
+recomputing their scientific values. No tolerance is added.
 
 Historical source data, published bytes, release identities and evidence remain
 unchanged. Six-digit formatting applies to new output; fetch must preserve any
-existing literal release ID and all its fractional digits. No source rewrites,
-uploads, pointer changes, deployment, commits, tags or releases are authorized.
+existing literal release ID and all its fractional digits. Protected source archives and historical evidence remain read-only. No uploads,
+pointer changes, deployment, commits, tags or releases are authorized.
 
 Source references: [writer](../scripts/geocsv.py),
 [position helper](../scripts/gps.py),

@@ -7,7 +7,7 @@ Use **`t_mer` = uncorrected MERMAID time** and **`t_gps` = GPS-reference time fo
 For GPS rows, these describe the synchronization measurement. For Recording
 rows, use the original recording's first sample; its `t_gps` is **estimated**
 through the existing clock-correction model. The GeoCSV names below are the
-selected replacement-schema names; their existing source variables, values
+locally implemented schema 1.0.0 names; their existing source variables, values
 and signs are unchanged.
 
 | Context | Quantity | Definition | MERMAID ahead: `t_mer > t_gps` | MERMAID behind: `t_mer < t_gps` |
@@ -49,3 +49,11 @@ Source behavior was inspected at automaid commit `9888d0015ca15c2c4c0d14b75b18d9
 The selected names, row requirements and accepted quantization are recorded in
 [the migration decisions](geocsv-method-identifiers.md). This matrix changes no
 code, clock model, timestamps or scientific data.
+
+## Local migration verification
+
+Automaid v4.6.0 changes only GeoCSV serialization and its allowed version value.
+ClockOffset still reads `gps.mseed_time_delay`; TimeCorrectionApplied still reads
+`event.mseed_time_correction`. Recording Time still comes from the already corrected
+source Stats. Six-digit UTC serialization uses nearest-microsecond ties to even;
+MiniSEED truncation, applied bits and record-offset logic remain unchanged.
