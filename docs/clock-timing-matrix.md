@@ -67,7 +67,9 @@ The rounded tick count must fit the signed 32-bit field; non-finite and
 out-of-range corrections raise before file mutation. This changes correction
 history serialization only. The clock model, corrected waveform timestamps,
 GeoCSV values, applied bits and record-offset advancement are unchanged.
-Protected processed products and existing candidate snapshots are not regenerated.
+That follow-up did not regenerate processed products or existing candidates.
+The canonical tree was subsequently regenerated with v4.6.2 on 2026-10-30;
+historical candidates and their acceptance reports remain unchanged.
 
 
 ### Conversion audit and verification
