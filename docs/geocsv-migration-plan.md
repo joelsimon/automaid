@@ -31,6 +31,13 @@ Fresh regenerated-corpus evidence is recorded in [the 2026-10-30 validation find
 43,365/43,365 pairs passed report schema 4 and its acceptance gate. This local
 testing-only result does not authorize publication or accept different bytes.
 
+On 2026-10-30, publisher 0.4.2 separately published the schema 1.0.0
+P0006/P0045 testing snapshot `2026-10-30T18:08:32.316000Z` after fresh
+acceptance of all 3,292 original pairs. Exact public downloads, parsing,
+association, testing activation and scoped local archive recording passed.
+Production remains inactive; no source modification, Worker deployment or
+software release occurred. See [publication evidence](../../mermaid-publisher/docs/geocsv/schema1-testing-publication.md).
+
 ## Coordination and instruction precedence
 
 Implement one coordinated migration in separate reviewable steps. Update and
