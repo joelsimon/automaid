@@ -145,6 +145,10 @@ The older implementation descriptions do not override the new payload contract.
 Retain existing MiniSEED fixed-header truncation to 0.0001-second units. In the
 normal already-corrected write path this records the applied amount; do not add
 a rounding refactor or rounding-boundary test work to this migration.
+The separately authorized v4.6.1 follow-up replaces that truncation with
+nearest-tick decimal ties-to-even rounding and validates finite/signed-32-bit
+values before file mutation; see [the clock timing matrix](clock-timing-matrix.md).
+That follow-up does not regenerate protected products or migration candidates.
 
 The all-record correction-value bug is resolved by automaid commit `c16bf70`,
 which restored record-offset advancement. Current-helper checks passed for

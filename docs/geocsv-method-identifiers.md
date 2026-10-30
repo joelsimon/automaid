@@ -167,12 +167,15 @@ clock processing. The source mapping was checked at automaid commit
 assertions passed, and all 3,266 P0006 GPS GeoCSV rows matched the negative of
 the raw GPS export's `gps_time-mer_time` value at printed precision.
 
-MiniSEED's existing fixed-header conversion truncates the correction toward
-zero to 0.0001-second units. Retain this behavior: in the normal write path,
-timestamps are already corrected and the applied bit prevents reapplication.
-The stored field is correction history; its quantization does not round the
-waveform timestamps or the GeoCSV value. No rounding refactor or new rounding
-boundary test work is included in the migration.
+The GeoCSV migration retained MiniSEED fixed-header truncation toward zero.
+A separately authorized follow-up in automaid v4.6.1 rounds the decimal spelling
+of the supplied correction to the nearest 0.0001-second tick, with exact ties
+to even. Non-finite values and rounded ticks outside the signed 32-bit range
+raise before any file bytes change. In the normal write path, timestamps are
+already corrected and the applied bit prevents reapplication. The stored field
+is correction history; its quantization does not round waveform timestamps or
+the GeoCSV value. Existing processed waveforms and migration candidates remain
+unchanged; their original correction fields retain the earlier serialization.
 
 The separate record-offset regression was fixed in automaid commit `c16bf70`
 by restoring advancement to the next record. Verification of the current helper

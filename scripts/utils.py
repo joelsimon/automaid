@@ -18,6 +18,7 @@ import datetime
 import warnings
 import csv
 from pathlib import Path
+from decimal import Decimal, ROUND_HALF_EVEN
 import numpy as np
 import plotly.graph_objs as graph
 
@@ -272,7 +273,8 @@ def set_mseed_time_correction(mseed_filename, time_corr_secs):
 
     Args:
         mseed_filename (str): Time-corrected miniSEED filename
-        time_corr_secs (float): Time correction [seconds]
+        time_corr_secs (float): Finite time correction [seconds], rounded to
+            nearest 0.0001-second tick with exact decimal ties to even.
 
     Result:
         modifies miniSEED file (see warnings and notes)
@@ -300,7 +302,15 @@ def set_mseed_time_correction(mseed_filename, time_corr_secs):
     ## All page numbers refer to the SEED Format Version 2.4 manual
     ## http://www.fdsn.org/pdf/SEEDManual_V2.4.pdf
     # Time correction values are in units of 0.0001 (1e-4) seconds (pg. 109)
-    time_corr_one_ten_thous = np.int32(time_corr_secs / 0.0001)
+    # Quantize the decimal spelling of the supplied correction, not a binary
+    # float division. Validate before changing any file bytes.
+    correction = Decimal(str(time_corr_secs))
+    if not correction.is_finite():
+        raise ValueError("MiniSEED time correction must be finite")
+    time_corr_one_ten_thous = int(
+        (correction * 10_000).to_integral_value(rounding=ROUND_HALF_EVEN))
+    if not -(2**31) <= time_corr_one_ten_thous < 2**31:
+        raise ValueError("MiniSEED time correction exceeds signed 32-bit range")
 
     # Set "Time correction applied" [Bit 1] (Note 12;  pg. 108)
     # Warning: this unsets any other flags that are set
