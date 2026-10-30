@@ -31,7 +31,7 @@ make automaid an Argo DAC, GDAC, or format-compliant producer.
 
 ## GeoCSV format design
 
-- [MERMAID GeoCSV schema 1.0.0](../../mermaid-geocsv/docs/format-spec.md): selected migration contract, exact fields/header, complete synthetic example and acceptance cases; not yet implemented.
+- [MERMAID GeoCSV schema 1.0.0](../../mermaid-geocsv/docs/format-spec.md): locally implemented contract, exact fields/header, complete synthetic example and acceptance cases.
 - [GeoCSV migration decisions](geocsv-method-identifiers.md): agreed names, timestamps, missing values and scientific constraints; maintained with mermaid-geocsv.
 - [Four-repository migration plan](geocsv-migration-plan.md): coordinated implementation, verification, instruction precedence and allowed code changes.
 - [Clock terminology cleanup TODO](clock-terminology-todo.md): source-audited wording fixes that preserve clock signs and algorithms.

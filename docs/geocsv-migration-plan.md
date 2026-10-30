@@ -135,19 +135,23 @@ Location is preserved. Do not silently repair input or fill from another record.
   markers across all four repos. Historical reports, archives and frozen examples
   remain historical; distinguish them from active examples and requirements.
 
-### Known contract conflicts to reconcile
+### Reconciled pre-migration contract conflicts
 
 The consumer AGENTS now states the selected target rather than requiring old
 `StartTime`, empty-known-Location, built-in `nan` missingness or an active 0.24.0
 baseline. Keep this instruction audit part of specification review.
 
-The preceding implementation references in `mermaid-geocsv/docs/reader-spec.md`, `docs/obspy-association.md`,
-`docs/sac.md`, public docstrings and tutorial pairs described pre-migration behavior and are updated with this implementation. Replace their conflicting timestamp, missingness and
-hard-coded elevation rules with the implementation; do not use those older
-rules to override the selected target or claim migration is already complete.
-The publisher AGENTS now makes the replacement's new-only policy explicit,
-and its contract and the site link to the selected payload specification as
-planned behavior. Publisher 0.4.0 removes active historical-consumer and encoded-path fallbacks
+The consumer's reader, association and SAC references, public docstrings and
+tutorial pairs now describe the implemented schema, including timestamp,
+missingness and source-elevation rules. Pre-migration reports and frozen files
+remain historical evidence, not active compatibility requirements. Generic
+GeoCSV examples are retained under the consumer's
+[specification references](../../mermaid-geocsv/docs/references/geocsv-v2.0.4-examples/README.md),
+not its data fixtures. The [fixture inventory](../../mermaid-geocsv/data/fixtures/README.md)
+distinguishes active schema conversions from frozen historical evidence.
+The publisher AGENTS makes the replacement's new-only policy explicit;
+its contract and the site link to the locally implemented payload specification.
+Compatible hosted payloads remain a separate pending publication step. Publisher 0.4.0 removes active historical-consumer and encoded-path fallbacks
 while retaining frozen evidence; report schema 4 uses `recording_records`.
 The older implementation descriptions do not override the new payload contract.
 
