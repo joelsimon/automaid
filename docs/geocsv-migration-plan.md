@@ -217,6 +217,13 @@ changes under the GeoCSV migration's writer-only allowlist.
 
 ## 3. Update publication and serving consumers
 
+Publisher 0.4.1 completes the creation/inspection identity preflight: require
+the exact schema 1.0.0 first line and literal six-digit UTC `#created`
+declaration, including recordless sources; reject duplicate schema declarations
+and comments after the column header. Quoted continuation lines remain CSV
+data. Full parsing stays consumer-owned. Report schema 4, scientific limits,
+manifest/download semantics and hosted deployment status are unchanged.
+
 - In `mermaid-publisher`, update recording selection/counts, `Time` access,
   scientific/export checks, active fixtures, documentation and active consumer
   requirements. Inspect `_verify_sac.py` and `validate_snapshot.py` explicitly.
