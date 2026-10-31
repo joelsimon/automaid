@@ -35,11 +35,8 @@ class GPS:
         self.clockfreq = clockfreq
         self.rawstr_dict = rawstr_dict
         self.source = source
-        # The miniSEED convention of a time delay is of opposite sign of the
-        # `clockdrift` (or the `clockdrift_correction`) of this program
-        #
-        # (+) clockdrift = MER time EARLY w.r.t GPS = (-) MER (record) time delay
-        # (-) clockdrift = MER time LATE w.r.t GPS = (+) MER (record) time delay
+        # ClockOffset is instrument time minus GPS time, opposite to manual drift.
+        # This internal name is not a MiniSEED fixed-header or filter-delay field.
         if self.clockdrift is not None:
             self.mseed_time_delay = -self.clockdrift
         else:
@@ -210,12 +207,9 @@ def linear_interpolation(gps_list, date):
             j += 1
 
     description= "interpolation attempted using multiple GPS points"
-    # If the distance between the two GPS points retained is less than 20 m, don't interpolate just
-    # return the one nearest in time to the requested date (don't simply fix a known location to the
-    # requested interpolation date because it may happen that the input locations may be very near
-    # to one another, but their dates may be very far from the requested date -- imagine if you gave
-    # this algorithm two points, which differ by 1 meter and 1 second, and requested an interpolated
-    # location date one after the last input date)
+    # If the retained fixes are less than 20 m apart, keep gps_list[i]'s
+    # position and epoch. Do not attach that anchor position to the requested
+    # epoch: extrapolation from nearly coincident fixes can be unstable.
     if gps2dist_azimuth(gps_list[j].latitude, gps_list[j].longitude, gps_list[i].latitude, gps_list[i].longitude)[0] < 20:
         interp_lat = gps_list[i].latitude
         interp_lon = gps_list[i].longitude

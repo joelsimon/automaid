@@ -538,7 +538,7 @@ class Event:
         self.processed_data_min = np.amin(self.processed_data)
 
     def correct_clockdrift(self, gps_descent, gps_ascent):
-        '''Estimate and correct GPS clockdrift for this event.
+        '''Estimate the MERMAID clock offset against GPS and correct this event.
 
         Sets attrs:
 
@@ -548,15 +548,13 @@ class Event:
 
         '''
 
-        # Correct the clock drift of the Mermaid board with GPS measurement
+        # Estimate the recording correction from the bracketing GPS synchronizations
         pct = (self.uncorrected_starttime - gps_descent.date) / (gps_ascent.date - gps_descent.date)
         self.clockdrift_correction = gps_ascent.clockdrift * pct
 
-        # The miniSEED convention of a time correction is of the same sign of
-        # the `clockdrift` (or the `clockdrift_correction') of this program
-        #
-        # positive clockdrift => uncorrected MER time early (onboard clock is slow) w.r.t GPS
-        # negative clockdrift => uncorrected MER time late (oboard clock is fast) w.r.t GPS
+        # Positive correction moves an instrument timestamp that reads behind GPS
+        # later; negative correction moves one that reads ahead earlier.
+        # MiniSEED stores this applied amount as correction history.
         self.mseed_time_correction = self.clockdrift_correction
 
         # Apply correction

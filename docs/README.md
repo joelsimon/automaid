@@ -29,10 +29,8 @@ produce standard Argo profile files.
 These pages summarize external standards and current code behavior. They do not
 make automaid an Argo DAC, GDAC, or format-compliant producer.
 
-## GeoCSV format design
+## GeoCSV workflow
 
-- [MERMAID GeoCSV schema 1.0.0](../../mermaid-geocsv/docs/format-spec.md): locally implemented contract, exact fields/header, complete synthetic example and acceptance cases.
-- [GeoCSV migration decisions](geocsv-method-identifiers.md): agreed names, timestamps, missing values and scientific constraints; maintained with mermaid-geocsv.
-- [Four-repository migration plan](geocsv-migration-plan.md): coordinated implementation, verification, instruction precedence and allowed code changes.
-- [Clock terminology cleanup TODO](clock-terminology-todo.md): source-audited wording fixes that preserve clock signs and algorithms.
-- [Clock timing matrix](clock-timing-matrix.md): GPS/recording sign conventions, source-variable mappings and MiniSEED applied-bit behavior.
+- [Production and workflow](geocsv.md): outputs, scientific sources, deduplication and ownership.
+- [Payload schema](../../mermaid-geocsv/docs/format-spec.md): exact header, fields, missingness and examples.
+- [Clock timing matrix](clock-timing-matrix.md): signs, source mappings, correction serialization and limitations.

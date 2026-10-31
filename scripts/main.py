@@ -280,8 +280,8 @@ def main():
             if cycle_log.gps_list is None:
                 continue
 
-            # Validate that the GPS may be used to correct various MERMAID
-            # timestamps, including diving/surfacing and event starttimes
+            # Validate GPS fixes for recording clock corrections and position interpolation;
+            # crossing timestamps do not receive the recording correction.
             cycle_log.validate_gps(min_gps_fix, max_gps_time)
 
             # Apply clock corrections to the events associated with this

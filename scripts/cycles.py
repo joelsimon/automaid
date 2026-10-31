@@ -719,8 +719,8 @@ class Cycle:
     def validate_gps(self, num_gps=2, max_time=5400):
         """
 
-        Returns true if valid GPS fixes exist to interpolate clock drifts and
-        station locations at the time of recording events.
+        Set GPS eligibility flags for recording clock corrections and station
+        position interpolation.
 
         Args:
         num_gps (int): Min. # GPS fixes before(after) diving(surfacing) (def=2)
@@ -737,11 +737,10 @@ class Cycle:
 
         If max_time is ignored if num_gps=1.
 
-        Allows at most 5 s of clockdrift (generally drifts are < 2 s) to skip
-        cases when clock resets occurred immediately before/after dive (MERMAID's
-        onboard clock resets to UNIX time 0 -- Thu Jan 1 00:00:00 UTC 1970 --
-        which results in a reported clockdrift of ~50 yr; these should already
-        be excluded by `get_events_between`, but you can never be too careful).
+        Clock-correction eligibility requires both selected signed clockdrift
+        values to be less than 5 seconds. This is not an absolute-value bound.
+        The check screens positive reset offsets; the intended treatment of
+        large negative offsets remains a separate scientific review question.
 
         """
 
@@ -812,7 +811,7 @@ class Cycle:
         return
 
     def correct_clockdrifts(self):
-        '''Estimate and correct GPS clockdrifts for each event associated with this
+        '''Estimate MERMAID clock corrections against GPS for each event in this
         complete dive.
 
         '''

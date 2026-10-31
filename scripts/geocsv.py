@@ -5,16 +5,6 @@
 #
 # Developer: Joel D. Simon (JDS)
 # Contact: jdsimon@alumni.princeton.edu | joeldsimon@gmail.com
-# Last modified by JDS: 16-May-2025
-# Last tested: Python 3.10.13, Darwin Kernel Version 23.6.0
-
-# Todo:
-#
-# *Add `read` method at module level
-# *Convert most of current GeoCSV guts to `write` method at module level
-# *Main GeoCSV object should organize (dict?) file columns (w/o class-level read/write methods)
-# *Write (nested) function docstrings
-# *Verify types and signs, e.g. for 'time correction/delay' ([+/-]np.int32)
 
 import csv
 import hashlib
@@ -303,7 +293,7 @@ class GeoCSV:
         def format_algo_event_rows(cycle):
             """Format GeoCSV rows of event metadata (e.g., starttime and MERMAID location)
 
-            Event metadata == 'Algorithm'
+            Recording rows describe original waveform segments.
 
             Args:
                 cycle (cycles.Cycle instance)
@@ -474,8 +464,6 @@ class GeoCSV:
 
             Preserve the GPS helper's intentional anchor position/time fallback.
 
-            Passage into/out of thermocline == 'Algorithm' (interpolated)
-
             Args:
                 cycle (cycles.Cycle instance):
 
@@ -524,12 +512,12 @@ class GeoCSV:
             gps_rows.extend(format_gps_rows(cycle))
             press_rows.extend(format_press_rows(cycle))
 
-            # "Algorithm" event rows, paired with their source Event instances
+            # Recording rows, paired with their source Event instances
             algo_rows_tup = format_algo_event_rows(cycle)
             det_algo_records.extend(algo_rows_tup[0])
             req_algo_records.extend(algo_rows_tup[1])
 
-            # "Algorithm"-thermocline formatted rows
+            # Interpolated upper mixed-layer boundary rows
             thermo_algo_rows.extend(format_algo_thermo_rows(cycle))
 
         # Remove pressure measurements taken before(after) first(last) GPS measurements
@@ -552,7 +540,7 @@ class GeoCSV:
         det_req_algo_rows, det_req_clashes = deduplicate_algo_event_rows(
             det_algo_records + req_algo_records)
 
-        # The complete file combines "Measurement" and "Algorithm" rows
+        # The complete file combines measurement, recording and crossing rows
         geocsv_det_rows = meas_rows + det_algo_rows + thermo_algo_rows
         geocsv_req_rows = meas_rows + req_algo_rows + thermo_algo_rows
         geocsv_det_req_rows = meas_rows + det_req_algo_rows + thermo_algo_rows
@@ -588,7 +576,7 @@ class GeoCSV:
                     csvfile.write(self.delimiter.join(comment_fields) + self.lineterminator)
                 csvwriter.writerow(self.header)
 
-            # Write the combined "Measurement" and "Algorithm" rows to all three files
+            # Write the combined measurement, recording and crossing rows to all three files
             for csvfile, rows in [(csvfile_det, geocsv_det_rows),
                                   (csvfile_req, geocsv_req_rows),
                                   (csvfile_det_req, geocsv_det_req_rows)]:
